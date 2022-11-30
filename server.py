@@ -21,20 +21,34 @@ class Server:
     def add_client(self, name: str, address):
         self.clients[address] = name
         self.names[name] = address
-        logging.debug(f'Client connected: {name, address}')
+        logging.debug(f"Client connected: {name, address}")
 
     def remove_client(self, address):
         try:
             del self.names[self.clients[address]]
             del self.clients[address]
         except KeyError:
-            print(f'No such client: {address}')
+            print(f"No such client: {address}")
 
     def create_connection(self, client1: tuple, client2: tuple):
-        logging.debug(f'Creating connection between {self.clients[client1]}: {client1} and'
-                      f' {self.clients[client2]}: {client2}')
-        data1 = json.dumps({"cmd": "connect_to_peer", "peer_address": client1, "name": self.clients[client1]}).encode()
-        data2 = json.dumps({"cmd": "connect_to_peer", "peer_address": client2, "name": self.clients[client2]}).encode()
+        logging.debug(
+            f"Creating connection between {self.clients[client1]}: {client1} and"
+            f" {self.clients[client2]}: {client2}"
+        )
+        data1 = json.dumps(
+            {
+                "cmd": "connect_to_peer",
+                "peer_address": client1,
+                "name": self.clients[client1],
+            }
+        ).encode()
+        data2 = json.dumps(
+            {
+                "cmd": "connect_to_peer",
+                "peer_address": client2,
+                "name": self.clients[client2],
+            }
+        ).encode()
         self.sock.sendto(data2, client1)
         self.sock.sendto(data1, client2)
 
@@ -58,34 +72,32 @@ class Server:
     def receive_data(self):
         while True:
             data, address = self.sock.recvfrom(1024)
-            if address in self.clients:
-                msg = json.loads(data.decode())
-                logging.debug(f'Received message: {msg} from {self.clients[address]}')
-                self.tasks.append((address, msg))
-            else:
-                msg = json.loads(data.decode())
-                logging.debug(f'Received message: {msg} from {address}')
-                if msg["cmd"] == "connect":
-                    self.add_client(msg["name"], address)
-
+            try:
+                if address in self.clients:
+                    msg = json.loads(data.decode())
+                    logging.debug(f"Received message: {msg} from {self.clients[address]}")
+                    self.tasks.append((address, msg))
+                else:
+                    msg = json.loads(data.decode())
+                    logging.debug(f"Received message: {msg} from {address}")
+                    if msg["cmd"] == "connect":
+                        self.add_client(msg["name"], address)
+            except json.JSONDecodeError:
+                print(f'Invalid msg: {data.decode()}')
 
 
 def main():
     logging.basicConfig(level=LOGLEVEL)
     p2p_server = Server()
-    logging.debug(f'Server up and running on address {SERVER_IP} port {SERVER_PORT}')
+    logging.debug(f"Server up and running on address {SERVER_IP} port {SERVER_PORT}")
     receive_thread = Thread(target=p2p_server.receive_data)
     task_thread = Thread(target=p2p_server.handle_tasks)
     receive_thread.start()
     task_thread.start()
     if not LOCALHOST:
-        address = (input('enter ip\r\n'), int(input('enter port\r\n')))
-        for i in range(0, 20):
-            p2p_server.sock.sendto(b'random data', address)
-            time.sleep(0.5)
-            print('done')
+        pass
     # p2p_server.sock.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
