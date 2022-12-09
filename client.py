@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import socket
 import time
 import sys
@@ -19,6 +20,8 @@ class Client:
         self.tasks: Deque[Tuple, dict] = deque()  # deque of (address, task)
         self.wait_queue: Dict[Tuple, List] = {}
         self.peers: Dict[Tuple, str] = {}
+        self.peer_names: Dict[str, Tuple] = {}
+        self.stop_annoying_me = True
 
     def connect_to_peer(self, peer_name: str, peer_addr: tuple) -> bool:
         print(f"connecting to peer: {peer_name} on address {peer_addr}")
@@ -28,20 +31,37 @@ class Client:
 
     def remove_peer(self, address):
         try:
+            del self.peer_names[self.peers[address]]
             del self.peers[address]
         except KeyError:
             print(f"No such client: {address}")
 
     def add_peer(self, addr, name):
-        if addr not in self.peers:
+        if addr in self.peers:
             logging.debug(f"Peer {name} from address {addr} is already known")
         self.peers[addr] = name
+        self.peer_names[name] = addr
 
     def handle_server(self, msg: dict) -> bool:
         if msg["cmd"] == "connect_to_peer":
             peer_addr = tuple(msg["peer_address"])  # json doesn't support tuples
             peer_name = msg["name"]
             return self.connect_to_peer(peer_name, peer_addr)
+
+    def create_file(self, file_id: str):
+        try:
+            print(os.getcwd())
+            with open(FPATH+file_id, "x") as f:
+                ...
+        except FileExistsError:
+            logging.debug(f"file already exists: {file_id}")
+        self.stop_annoying_me = True
+        return
+
+    def append_to_file(self, file_id: str, data: bin):
+        self.stop_annoying_me = True
+        with open(FPATH+file_id, "wb") as f:
+            f.write(data)
 
     def handle_peer(self, task: Tuple[tuple, dict]):
         msg = task[1]
@@ -52,8 +72,15 @@ class Client:
                 pass
             else:
                 self.remove_peer(addr)
-        elif msg["cmd"] == "send_file":
+        elif msg["cmd"] == "new_file":
+            self.create_file(msg["file_id"])
+        elif msg["cmd"] == "file":
+            self.append_to_file(msg["file_id"], msg["raw"].encode())
             pass
+
+    def send_to_peer(self, msg: dict, addr: tuple):
+        data = json.dumps(msg).encode()
+        self.sock.sendto(data, addr)
 
     def send_to_server(self, msg: dict):
         data = json.dumps(msg).encode()
@@ -81,7 +108,7 @@ class Client:
         while True:
             data, addr = self.sock.recvfrom(1024)
             try:
-                msg = json.loads(data.decode()[0:100])
+                msg = json.loads(data.decode())
                 if addr == self._server_addr:
                     logging.debug(f"Received message from server: {msg}")
                     self.tasks.append((addr, msg))
@@ -111,9 +138,12 @@ def main():
     receive_thread.start()
     task_thread.start()
     client.send_to_server({"cmd": "connect", "name": client.name})
-    time.sleep(1)
     if name == "alice":
+        time.sleep(2)
         client.send_to_server({"cmd": "get_connection"})
+        time.sleep(5)
+        client.send_to_peer({"cmd": "new_file", "file_id": "test1"}, client.peer_names["bob"])
+        client.send_to_peer({"cmd": "file", "file_id": "test1", "raw": "hello there"}, client.peer_names["bob"])
 
 
 if __name__ == "__main__":

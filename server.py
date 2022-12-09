@@ -58,7 +58,6 @@ class Server:
                 if client2 != client_addr:
                     self.create_connection(client2, client_addr)
                     return
-
             self.tasks.append((client_addr, msg))
 
     def handle_tasks(self):
