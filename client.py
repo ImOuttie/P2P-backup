@@ -9,6 +9,10 @@ from utils import *
 from collections import deque
 from threading import Thread
 from typing import List, Optional, Tuple, Deque, Dict
+from hashlib import md5
+
+FILE_PATH: str
+HASHID: bin
 
 
 class Client:
@@ -22,6 +26,7 @@ class Client:
         self.peers: Dict[Tuple, str] = {}
         self.peer_names: Dict[str, Tuple] = {}
         self.stop_annoying_me = True
+        self.files_to_send = List[Tuple[HASHID, FILE_PATH]]
 
     def connect_to_peer(self, peer_name: str, peer_addr: tuple) -> bool:
         print(f"connecting to peer: {peer_name} on address {peer_addr}")
@@ -42,16 +47,10 @@ class Client:
         self.peers[addr] = name
         self.peer_names[name] = addr
 
-    def handle_server(self, msg: dict) -> bool:
-        if msg["cmd"] == "connect_to_peer":
-            peer_addr = tuple(msg["peer_address"])  # json doesn't support tuples
-            peer_name = msg["name"]
-            return self.connect_to_peer(peer_name, peer_addr)
-
     def create_file(self, file_id: str):
         try:
             print(os.getcwd())
-            with open(FPATH+file_id, "x") as f:
+            with open(FPATH + file_id, "x"):
                 ...
         except FileExistsError:
             logging.debug(f"file already exists: {file_id}")
@@ -60,8 +59,32 @@ class Client:
 
     def append_to_file(self, file_id: str, data: bin):
         self.stop_annoying_me = True
-        with open(FPATH+file_id, "wb") as f:
+        with open(FPATH + file_id, "wb") as f:
             f.write(data)
+
+    def req_send_file(self, absolute_path):
+        self.stop_annoying_me = True
+        with open(absolute_path, "rb") as f:
+            data = f.read()
+        hash = md5(data).digest()
+        parts = fragment_data(data)
+        dicts = [
+            {"hash": md5(part).digest(), "len": len(part), "type": "data"}
+            for part in parts
+        ]
+        parity = get_parity(*parts)
+        dicts.append(
+            {"hash": md5(parity).digest(), "len": len(parity), "type": "parity"}
+        )
+        data = json.dumps(
+            {"cmd": "send_file_req", "file_id": hash, "file_parts": dicts}
+        ).encode()
+
+    def handle_server(self, msg: dict) -> bool:
+        if msg["cmd"] == "connect_to_peer":
+            peer_addr = tuple(msg["peer_address"])  # json doesn't support tuples
+            peer_name = msg["name"]
+            return self.connect_to_peer(peer_name, peer_addr)
 
     def handle_peer(self, task: Tuple[tuple, dict]):
         msg = task[1]
@@ -118,7 +141,7 @@ class Client:
                 else:
                     self.add_peer(addr, msg["name"])
             except json.JSONDecodeError:
-                print(f'Invalid JSON format for data: {data.decode()}')
+                print(f"Invalid JSON format for data: {data.decode()}")
 
 
 def main():
@@ -142,9 +165,14 @@ def main():
         time.sleep(2)
         client.send_to_server({"cmd": "get_connection"})
         time.sleep(5)
-        client.send_to_peer({"cmd": "new_file", "file_id": "test1"}, client.peer_names["bob"])
-        client.send_to_peer({"cmd": "file", "file_id": "test1", "raw": "hello there"}, client.peer_names["bob"])
+        client.send_to_peer(
+            {"cmd": "new_file", "file_id": "test1"}, client.peer_names["bob"]
+        )
+        client.send_to_peer(
+            {"cmd": "file", "file_id": "test1", "raw": "hello there"},
+            client.peer_names["bob"],
+        )
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -1,3 +1,5 @@
+import sys
+
 LOCALHOST = True
 
 if LOCALHOST:
@@ -9,3 +11,4 @@ CLIENT_PORT = 30001
 CLIENT_IP = "0.0.0.0"
 LOGLEVEL = 1
 FPATH = r"backups\\"
+BYTEORDER = sys.byteorder
