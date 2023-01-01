@@ -63,22 +63,22 @@ class Client:
             f.write(data)
 
     def req_send_file(self, absolute_path):
-        self.stop_annoying_me = True
         with open(absolute_path, "rb") as f:
             data = f.read()
-        hash = md5(data).digest()
         parts = fragment_data(data)
         dicts = [
             {"hash": md5(part).digest(), "len": len(part), "type": "data"}
             for part in parts
         ]
+        # add parity to list:
         parity = get_parity(*parts)
         dicts.append(
             {"hash": md5(parity).digest(), "len": len(parity), "type": "parity"}
         )
-        data = json.dumps(
-            {"cmd": "send_file_req", "file_id": hash, "file_parts": dicts}
-        ).encode()
+        file_hash = md5(data).digest()
+        self.send_to_server(
+            {"cmd": "send_file_req", "file_id": file_hash, "file_parts": dicts}
+        )
 
     def handle_server(self, msg: dict) -> bool:
         if msg["cmd"] == "connect_to_peer":
@@ -174,5 +174,5 @@ def main():
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

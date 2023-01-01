@@ -9,13 +9,18 @@ from threading import Thread
 import time
 from typing import List, Optional, Tuple, Dict, Deque
 
+Files: Dict[str, List]  # files[file_id] = (file1 hash, file2 hash, parity hash)
+Name: str
+Address: Tuple
+
 
 class Server:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((SERVER_IP, SERVER_PORT))
-        self.clients: Dict[Tuple, str] = {}
-        self.names: Dict[str, Tuple] = {}
+        self.clients: Dict[Address, Name] = {}
+        self.names: Dict[Name, Address] = {}
+        self.files: Dict[Name, Files] = {}
         self.tasks: Deque[Tuple[Tuple, Dict]] = deque()
 
     def add_client(self, name: str, address):
@@ -52,13 +57,35 @@ class Server:
         self.sock.sendto(data2, client1)
         self.sock.sendto(data1, client2)
 
+    def find_connection(self, client_addr: Tuple) -> Tuple or bool:
+        for client in self.clients.keys():
+            if client != client_addr:
+                return client
+        # if not found client return none
+        return
+
+    def handle_file_req(self, client: str, request: dict):
+        file_id = request["file_id"]
+        parity_hash = ...
+        for part in request["file_parts"]:
+            if part["type"] == "parity":
+                parity_hash = part["hash"]
+                continue
+            self.files[client][file_id].append(part["hash"])
+        self.files[client][file_id].append(parity_hash)
+
     def handle_client(self, client_addr, msg: dict):
         if msg["cmd"] == "get_connection":
-            for client2 in self.clients.keys():
-                if client2 != client_addr:
-                    self.create_connection(client2, client_addr)
-                    return
-            self.tasks.append((client_addr, msg))
+            client = self.find_connection(client_addr)
+            if not client:
+                self.tasks.append((client_addr, msg))
+                return
+            self.create_connection(client_addr, client)
+        elif msg["cmd"] == "send_file_req":
+            file_id = msg["file_id"]
+            name = self.clients[client_addr]
+            # self.files[name] = {file_id: }
+            pass
 
     def handle_tasks(self):
         while True:
@@ -74,7 +101,9 @@ class Server:
             try:
                 if address in self.clients:
                     msg = json.loads(data.decode())
-                    logging.debug(f"Received message: {msg} from {self.clients[address]}")
+                    logging.debug(
+                        f"Received message: {msg} from {self.clients[address]}"
+                    )
                     self.tasks.append((address, msg))
                 else:
                     msg = json.loads(data.decode())
@@ -82,7 +111,7 @@ class Server:
                     if msg["cmd"] == "connect":
                         self.add_client(msg["name"], address)
             except json.JSONDecodeError:
-                print(f'Invalid msg: {data.decode()}')
+                print(f"Invalid msg: {data.decode()}")
 
 
 def main():
