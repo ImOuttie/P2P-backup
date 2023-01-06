@@ -2,3 +2,4 @@ temp.py
 test.py
 backups
 __pycache__
+*.mp4

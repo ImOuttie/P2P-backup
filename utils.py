@@ -2,6 +2,17 @@ from itertools import cycle, islice
 
 from settings import *
 from typing import Tuple
+import uuid
+from hashlib import md5
+
+
+def get_unique_id() -> str:
+    return str(uuid.uuid1().hex)
+
+
+def get_hash(data: bytes) -> str:
+    """ returns (str) hex representation of hash"""
+    return md5(data).digest().hex()
 
 
 def get_parity(data1: bytes, *other_data: bytes) -> bytes:

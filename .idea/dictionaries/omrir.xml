@@ -4,6 +4,9 @@
       <w>addr</w>
       <w>defragment</w>
       <w>defragments</w>
+      <w>fpath</w>
+      <w>hashid</w>
+      <w>loglevel</w>
     </words>
   </dictionary>
 </component>

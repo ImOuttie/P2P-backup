@@ -11,8 +11,8 @@ from threading import Thread
 from typing import List, Optional, Tuple, Deque, Dict
 from hashlib import md5
 
-FILE_PATH: str
-HASHID: bin
+FILE_PATH = str
+HASHID = bin
 
 
 class Client:
@@ -65,19 +65,20 @@ class Client:
     def req_send_file(self, absolute_path):
         with open(absolute_path, "rb") as f:
             data = f.read()
-        parts = fragment_data(data)
+        name = os.path.basename(absolute_path)
+        stripes = fragment_data(data)
         dicts = [
-            {"hash": md5(part).digest(), "len": len(part), "type": "data"}
-            for part in parts
+            {"hash": get_hash(stripe), "len": len(stripe), "is_parity": False}
+            for stripe in stripes
         ]
         # add parity to list:
-        parity = get_parity(*parts)
+        parity = get_parity(*stripes)
         dicts.append(
-            {"hash": md5(parity).digest(), "len": len(parity), "type": "parity"}
+            {"hash": get_hash(parity), "len": len(parity), "is_parity": True}
         )
-        file_hash = md5(data).digest()
+        file_hash = get_hash(data)
         self.send_to_server(
-            {"cmd": "send_file_req", "file_id": file_hash, "file_parts": dicts}
+            {"cmd": "send_file_req", "name": name, "hash": file_hash, "stripes": dicts}
         )
 
     def handle_server(self, msg: dict) -> bool:
@@ -165,13 +166,7 @@ def main():
         time.sleep(2)
         client.send_to_server({"cmd": "get_connection"})
         time.sleep(5)
-        client.send_to_peer(
-            {"cmd": "new_file", "file_id": "test1"}, client.peer_names["bob"]
-        )
-        client.send_to_peer(
-            {"cmd": "file", "file_id": "test1", "raw": "hello there"},
-            client.peer_names["bob"],
-        )
+        client.req_send_file(r"C:\Cyber\Projects\P2P-backup\backups\text.txt")
 
 
 if __name__ == "__main__":

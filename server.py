@@ -8,10 +8,14 @@ from collections import deque
 from threading import Thread
 import time
 from typing import List, Optional, Tuple, Dict, Deque
+from dataclasses import dataclass, field
+from my_classes import *
 
-Files: Dict[str, List]  # files[file_id] = (file1 hash, file2 hash, parity hash)
-Name: str
-Address: Tuple
+
+Files = List[File]
+Name = str
+Filename: str
+Address = Tuple
 
 
 class Server:
@@ -21,15 +25,18 @@ class Server:
         self.clients: Dict[Address, Name] = {}
         self.names: Dict[Name, Address] = {}
         self.files: Dict[Name, Files] = {}
-        self.tasks: Deque[Tuple[Tuple, Dict]] = deque()
+        self.file_names: Dict[Name, Dict[Filename, File]]
+        self.tasks: Deque[Tuple[Optional[Tuple], Dict]] = deque()
 
-    def add_client(self, name: str, address):
+    def add_client(self, name: str, address: Tuple):
         self.clients[address] = name
         self.names[name] = address
+        self.files[name] = []
         logging.debug(f"Client connected: {name, address}")
 
     def remove_client(self, address):
         try:
+            del self.files[self.clients[address]]
             del self.names[self.clients[address]]
             del self.clients[address]
         except KeyError:
@@ -57,22 +64,27 @@ class Server:
         self.sock.sendto(data2, client1)
         self.sock.sendto(data1, client2)
 
-    def find_connection(self, client_addr: Tuple) -> Tuple or bool:
+    def find_connection(self, client_addr: Tuple) -> Optional[Tuple]:
         for client in self.clients.keys():
             if client != client_addr:
                 return client
         # if not found client return none
         return
 
-    def handle_file_req(self, client: str, request: dict):
-        file_id = request["file_id"]
-        parity_hash = ...
-        for part in request["file_parts"]:
-            if part["type"] == "parity":
-                parity_hash = part["hash"]
-                continue
-            self.files[client][file_id].append(part["hash"])
-        self.files[client][file_id].append(parity_hash)
+    def handle_file_req(self, user: str, request: dict):
+        file_name = request["name"]
+        file_hash = request["hash"]
+        new_file = File(owner=user, hash=file_hash, name=file_name)
+        self.files[user].append(new_file)
+        for stripe in request["stripes"]:
+            new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"])
+            new_file.stripes.append(new_stripe)
+        print(new_file)
+        self.tasks.append((None, {"task": "find_location_for_data", "client": user, file_name: new_file.name}))
+
+    def handle_self(self, task: dict):
+        if task["task"] == "find_location_for_data":
+            pass
 
     def handle_client(self, client_addr, msg: dict):
         if msg["cmd"] == "get_connection":
@@ -82,10 +94,8 @@ class Server:
                 return
             self.create_connection(client_addr, client)
         elif msg["cmd"] == "send_file_req":
-            file_id = msg["file_id"]
             name = self.clients[client_addr]
-            # self.files[name] = {file_id: }
-            pass
+            self.handle_file_req(name, msg)
 
     def handle_tasks(self):
         while True:
@@ -93,7 +103,9 @@ class Server:
                 time.sleep(0)  # release GIL; don't waste rest of quantum
                 continue
             addr, msg = self.tasks.pop()
-            self.handle_client(addr, msg)
+            if addr:
+                self.handle_client(addr, msg)
+                continue
 
     def receive_data(self):
         while True:
