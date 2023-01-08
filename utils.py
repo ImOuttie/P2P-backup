@@ -7,6 +7,7 @@ from hashlib import md5
 
 
 def get_unique_id() -> str:
+    """ returns (str) hex representation of a unique ID using UUID"""
     return str(uuid.uuid1().hex)
 
 

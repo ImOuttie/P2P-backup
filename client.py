@@ -10,9 +10,10 @@ from collections import deque
 from threading import Thread
 from typing import List, Optional, Tuple, Deque, Dict
 from hashlib import md5
+from server_dataclasses import File
 
 FILE_PATH = str
-HASHID = bin
+FILE_HASH = str
 
 
 class Client:
@@ -26,7 +27,8 @@ class Client:
         self.peers: Dict[Tuple, str] = {}
         self.peer_names: Dict[str, Tuple] = {}
         self.stop_annoying_me = True
-        self.files_to_send = List[Tuple[HASHID, FILE_PATH]]
+        self.files_on_server: Dict[str, File]
+        self.files_to_send = List[Tuple[FILE_HASH, FILE_PATH]]
 
     def connect_to_peer(self, peer_name: str, peer_addr: tuple) -> bool:
         print(f"connecting to peer: {peer_name} on address {peer_addr}")
@@ -65,6 +67,7 @@ class Client:
     def req_send_file(self, absolute_path):
         with open(absolute_path, "rb") as f:
             data = f.read()
+
         name = os.path.basename(absolute_path)
         stripes = fragment_data(data)
         dicts = [
@@ -78,29 +81,34 @@ class Client:
         )
         file_hash = get_hash(data)
         self.send_to_server(
-            {"cmd": "send_file_req", "name": name, "hash": file_hash, "stripes": dicts}
+            {"cmd": "send_file_req", "name": name, "hash": file_hash, "len": len(data), "stripes": dicts}
         )
 
+    def handle_file_resp(self):
+        pass
+
     def handle_server(self, msg: dict) -> bool:
-        if msg["cmd"] == "connect_to_peer":
-            peer_addr = tuple(msg["peer_address"])  # json doesn't support tuples
-            peer_name = msg["name"]
-            return self.connect_to_peer(peer_name, peer_addr)
+        match msg["cmd"]:
+            case "connect_to_peer":
+                peer_addr = tuple(msg["peer_address"])  # json doesn't support tuples
+                peer_name = msg["name"]
+                return self.connect_to_peer(peer_name, peer_addr)
+            case "send_file_resp":
+                self.handle_file_resp()
 
     def handle_peer(self, task: Tuple[tuple, dict]):
         msg = task[1]
         addr = task[0]
-        if msg["cmd"] == "received_connection":
-            if msg["accept"]:
-                # TODO handle this
-                pass
-            else:
+        match msg["cmd"]:
+            case "received connection":
+                if msg["accept"]:
+                    # TODO handle this
+                    return
                 self.remove_peer(addr)
-        elif msg["cmd"] == "new_file":
-            self.create_file(msg["file_id"])
-        elif msg["cmd"] == "file":
-            self.append_to_file(msg["file_id"], msg["raw"].encode())
-            pass
+            case "new_file":
+                self.create_file(msg["file_id"])
+            case "file":
+                self.append_to_file(msg["file_id"], msg["raw"].encode())
 
     def send_to_peer(self, msg: dict, addr: tuple):
         data = json.dumps(msg).encode()
@@ -161,7 +169,7 @@ def main():
     task_thread = Thread(target=client.handle_tasks)
     receive_thread.start()
     task_thread.start()
-    client.send_to_server({"cmd": "connect", "name": client.name})
+    client.send_to_server({"cmd": "connect", "name": client.name, "register": True})
     if name == "alice":
         time.sleep(2)
         client.send_to_server({"cmd": "get_connection"})
