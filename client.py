@@ -76,12 +76,16 @@ class Client:
         ]
         # add parity to list:
         parity = get_parity(*stripes)
-        dicts.append(
-            {"hash": get_hash(parity), "len": len(parity), "is_parity": True}
-        )
+        dicts.append({"hash": get_hash(parity), "len": len(parity), "is_parity": True})
         file_hash = get_hash(data)
         self.send_to_server(
-            {"cmd": "send_file_req", "name": name, "hash": file_hash, "len": len(data), "stripes": dicts}
+            {
+                "cmd": "send_file_req",
+                "name": name,
+                "hash": file_hash,
+                "len": len(data),
+                "stripes": dicts,
+            }
         )
 
     def handle_file_resp(self):
