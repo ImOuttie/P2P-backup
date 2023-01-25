@@ -6,6 +6,7 @@ from typing import List, Dict
 @dataclass(slots=True)
 class FileStripe:
     hash: str
+    id: str
     is_parity: bool
     location: str = field(default_factory=str)  # name of peer who stores file
 
@@ -15,3 +16,6 @@ class File:
     name: str
     hash: str
     len: int
+    absolute_path: str
+    stripes: List[FileStripe] = field(default_factory=list)
+

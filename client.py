@@ -10,10 +10,9 @@ from collections import deque
 from threading import Thread
 from typing import List, Optional, Tuple, Deque, Dict
 from hashlib import md5
-from server_dataclasses import File
+from client_dataclasses import *
 
-FILE_PATH = str
-FILE_HASH = str
+FILE_NAME: str
 
 
 class Client:
@@ -28,7 +27,7 @@ class Client:
         self.peer_names: Dict[str, Tuple] = {}
         self.stop_annoying_me = True
         self.files_on_server: Dict[str, File]
-        self.files_to_send = List[Tuple[FILE_HASH, FILE_PATH]]
+        self.files_to_send: Dict[FILE_NAME, File] = {}
 
     def connect_to_peer(self, peer_name: str, peer_addr: tuple) -> bool:
         print(f"connecting to peer: {peer_name} on address {peer_addr}")
@@ -51,7 +50,6 @@ class Client:
 
     def create_file(self, file_id: str):
         try:
-            print(os.getcwd())
             with open(FPATH + file_id, "x"):
                 ...
         except FileExistsError:
@@ -61,35 +59,38 @@ class Client:
 
     def append_to_file(self, file_id: str, data: bin):
         self.stop_annoying_me = True
-        with open(FPATH + file_id, "wb") as f:
+        with open(FPATH + file_id, "ab") as f:
             f.write(data)
 
-    def req_send_file(self, absolute_path):
-        with open(absolute_path, "rb") as f:
-            data = f.read()
-
-        name = os.path.basename(absolute_path)
-        stripes = fragment_data(data)
-        dicts = [
-            {"hash": get_hash(stripe), "len": len(stripe), "is_parity": False}
-            for stripe in stripes
-        ]
-        # add parity to list:
-        parity = get_parity(*stripes)
-        dicts.append({"hash": get_hash(parity), "len": len(parity), "is_parity": True})
-        file_hash = get_hash(data)
+    def req_send_file(self, absolute_path: str):
+        file = abstract_file(absolute_path)
+        dicts = [{"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity} for stripe in file.stripes]
         self.send_to_server(
             {
                 "cmd": "send_file_req",
-                "name": name,
-                "hash": file_hash,
-                "len": len(data),
+                "name": file.name,
+                "hash": file.hash,
+                "len": file.len,
                 "stripes": dicts,
             }
         )
 
-    def handle_file_resp(self):
-        pass
+    def send_stripe(self, stripe: str, peer_addr: tuple):
+        with open("temp/stripes/" + stripe, "rb") as f:
+            data = f.read()
+        data = encode_for_json(data)
+        self.send_to_peer({"cmd": "new_stripe", "id": stripe, "size": len(data)}, peer_addr)
+        time.sleep(0.1)
+        k = 0
+        while k * 1024 < len(data):
+            to_send = {"cmd": "append_stripe", "id": stripe, "raw": data[k * 1024: (k+1) * 1024]}
+            self.send_to_peer(to_send, peer_addr)
+            k += 1
+
+    def handle_file_resp(self, resp: dict):
+        file_name = resp["name"]
+        for stripe in resp["stripes"]:
+            self.send_stripe(stripe["id"], tuple(stripe["addr"]))
 
     def handle_server(self, msg: dict) -> bool:
         match msg["cmd"]:
@@ -98,7 +99,7 @@ class Client:
                 peer_name = msg["name"]
                 return self.connect_to_peer(peer_name, peer_addr)
             case "send_file_resp":
-                self.handle_file_resp()
+                self.handle_file_resp(msg)
 
     def handle_peer(self, task: Tuple[tuple, dict]):
         msg = task[1]
@@ -109,10 +110,10 @@ class Client:
                     # TODO handle this
                     return
                 self.remove_peer(addr)
-            case "new_file":
-                self.create_file(msg["file_id"])
-            case "file":
-                self.append_to_file(msg["file_id"], msg["raw"].encode())
+            case "new_stripe":
+                self.create_file(msg["id"])
+            case "append_stripe":
+                self.append_to_file(msg["id"], decode_from_json(msg["raw"]))
 
     def send_to_peer(self, msg: dict, addr: tuple):
         data = json.dumps(msg).encode()
@@ -127,7 +128,7 @@ class Client:
             if not self.tasks:
                 time.sleep(0)  # release GIL
                 continue
-            task = self.tasks.pop()
+            task = self.tasks.popleft()
             addr = task[0]
             msg = task[1]
             logging.debug(f"the current task is {task}")
@@ -151,7 +152,7 @@ class Client:
                 elif addr in self.peers:
                     logging.debug(f"Received message from peer: {addr} msg: {msg}")
                     self.tasks.append((addr, msg))
-                else:
+                elif msg["cmd"] == "connect":
                     self.add_peer(addr, msg["name"])
             except json.JSONDecodeError:
                 print(f"Invalid JSON format for data: {data.decode()}")
@@ -175,10 +176,8 @@ def main():
     task_thread.start()
     client.send_to_server({"cmd": "connect", "name": client.name, "register": True})
     if name == "alice":
-        time.sleep(2)
-        client.send_to_server({"cmd": "get_connection"})
-        time.sleep(5)
-        client.req_send_file(r"C:\Cyber\Projects\P2P-backup\backups\text.txt")
+        time.sleep(1.5)
+        client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")
 
 
 if __name__ == "__main__":

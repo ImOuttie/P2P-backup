@@ -77,14 +77,12 @@ class Server:
         return
 
     def handle_file_req(self, user: str, request: dict):
-        file_name = request["name"]
-        file_hash = request["hash"]
-        new_file = File(owner=user, hash=file_hash, name=file_name, len=request["len"])
+        new_file = File(owner=user, hash=request["hash"], name=request["name"], len=request["len"])
         self.files[user].append(new_file)
         for stripe in request["stripes"]:
-            new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"])
+            new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"])
             new_file.stripes.append(new_stripe)
-        print(new_file)
+        print(f"new file: {new_file}")
         self.tasks.append((None, {"task": "find_location_for_data", "client": user, "file": new_file}))
 
     def find_location_for_data(self, owner: str, filename: str) -> List | None:
@@ -100,10 +98,11 @@ class Server:
         return None
 
     def send_addrs_to_client(self, owner: User, users: List[User], file: File):
+        for user in users:
+            self.create_connection(owner.current_addr, user.current_addr)
         file_stripes = []
         for user, filestripe in zip(users, file.stripes):
-            self.create_connection(owner.current_addr, user.current_addr)
-            file_stripes.append({"hash": filestripe.hash, "peer": user.name, "addr": user.current_addr})
+            file_stripes.append({"id": filestripe.id, "peer": user.name, "addr": user.current_addr})
         data = json.dumps({"cmd": "send_file_resp", "name": file.name, "stripes": file_stripes}).encode()
         self.sock.sendto(data, owner.current_addr)
 
@@ -142,7 +141,7 @@ class Server:
                 else:
                     self.handle_self(msg)
                 continue
-            addr, msg = self.tasks.pop()
+            addr, msg = self.tasks.popleft()
             if addr:
                 self.handle_client(addr, msg)
                 continue

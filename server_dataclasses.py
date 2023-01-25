@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from utils import *
 from typing import List, Dict
+from enum import Enum, auto
 
 STRIPE_ID = str
 
@@ -9,7 +10,7 @@ STRIPE_ID = str
 class FileStripe:
     hash: str
     is_parity: bool
-    id: STRIPE_ID = field(default_factory=get_unique_id)
+    id: STRIPE_ID = str
     location: str = field(default_factory=str)  # name of user who stores file
 
 
