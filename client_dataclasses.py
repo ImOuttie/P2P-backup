@@ -18,4 +18,3 @@ class File:
     len: int
     absolute_path: str
     stripes: List[FileStripe] = field(default_factory=list)
-

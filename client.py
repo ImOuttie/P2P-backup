@@ -26,8 +26,7 @@ class Client:
         self.peers: Dict[Tuple, str] = {}
         self.peer_names: Dict[str, Tuple] = {}
         self.stop_annoying_me = True
-        self.files_on_server: Dict[str, File]
-        self.files_to_send: Dict[FILE_NAME, File] = {}
+        self.files_on_server: Dict[FILE_NAME, File] = {}
 
     def connect_to_peer(self, peer_name: str, peer_addr: tuple) -> bool:
         print(f"connecting to peer: {peer_name} on address {peer_addr}")
@@ -57,14 +56,10 @@ class Client:
         self.stop_annoying_me = True
         return
 
-    def append_to_file(self, file_id: str, data: bin):
-        self.stop_annoying_me = True
-        with open(FPATH + file_id, "ab") as f:
-            f.write(data)
-
     def req_send_file(self, absolute_path: str):
         file = abstract_file(absolute_path)
         dicts = [{"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity} for stripe in file.stripes]
+        self.files_on_server[file.name] = file
         self.send_to_server(
             {
                 "cmd": "send_file_req",
@@ -75,22 +70,25 @@ class Client:
             }
         )
 
-    def send_stripe(self, stripe: str, peer_addr: tuple):
-        with open("temp/stripes/" + stripe, "rb") as f:
+    def send_stripe(self, stripe_id: str, peer_addr: tuple):
+        with open("temp/stripes/" + stripe_id, "rb") as f:
             data = f.read()
         data = encode_for_json(data)
-        self.send_to_peer({"cmd": "new_stripe", "id": stripe, "size": len(data)}, peer_addr)
+        self.send_to_peer({"cmd": "new_stripe", "id": stripe_id, "size": len(data)}, peer_addr)
         time.sleep(0.1)
         k = 0
         while k * 1024 < len(data):
-            to_send = {"cmd": "append_stripe", "id": stripe, "raw": data[k * 1024: (k+1) * 1024]}
+            to_send = {"cmd": "append_stripe", "id": stripe_id, "raw": data[k * 1024: (k+1) * 1024]}
             self.send_to_peer(to_send, peer_addr)
             k += 1
+        # TEMP STRIPE NO LONGER NEEDED:
+        remove_temp_stripe(stripe_id)
 
-    def handle_file_resp(self, resp: dict):
-        file_name = resp["name"]
-        for stripe in resp["stripes"]:
-            self.send_stripe(stripe["id"], tuple(stripe["addr"]))
+    def handle_file_resp(self, response: dict):
+        file_name = response["name"]
+        for resp in response["stripes"]:
+            self.send_stripe(resp["id"], tuple(resp["addr"]))
+            update_stripe_location(self.files_on_server[file_name], resp["id"], resp["peer"])
 
     def handle_server(self, msg: dict) -> bool:
         match msg["cmd"]:
@@ -113,7 +111,7 @@ class Client:
             case "new_stripe":
                 self.create_file(msg["id"])
             case "append_stripe":
-                self.append_to_file(msg["id"], decode_from_json(msg["raw"]))
+                append_to_file(msg["id"], decode_from_json(msg["raw"]))
 
     def send_to_peer(self, msg: dict, addr: tuple):
         data = json.dumps(msg).encode()

@@ -32,7 +32,7 @@ def get_parity(data1: bytes, *other_data: bytes) -> bytes:
 
 
 def fragment_data(data: bytes) -> Tuple[bytes, bytes]:
-    """" returns tuple of all the even bytes and all the uneven bytes"""
+    """ " returns tuple of all the even bytes and all the uneven bytes"""
     return data[::2], data[1::2]
 
 
@@ -50,8 +50,8 @@ def defragment_data(data1: bytes, data2: bytes) -> bytes:
 
 
 def get_stripe_with_parity(stripe: bytes, parity: bytes) -> bytes:
-    """ uses parity data and a data stripe to return the other missing data stripe.
-    this is essentially virtual RAID 5 """
+    """uses parity data and a data stripe to return the other missing data stripe.
+    this is essentially virtual RAID 5"""
     return (
         int.from_bytes(parity, BYTEORDER) ^ int.from_bytes(stripe, BYTEORDER)
     ).to_bytes(len(parity), BYTEORDER)
@@ -63,7 +63,7 @@ def save_temp_stripe(id: str, data: bytes, temppath="temp/stripes/"):
 
 
 def abstract_file(absolute_path: str) -> File:
-    """ reads file and creates matching dataclass representation of it
+    """reads file and creates matching dataclass representation of it
     also saves all stripes of file (including parity) in temp folder"""
     with open(absolute_path, "rb") as f:
         data = f.read()
@@ -72,7 +72,9 @@ def abstract_file(absolute_path: str) -> File:
     file = File(name=name, hash=file_hash, len=len(data), absolute_path=absolute_path)
     data_stripes = fragment_data(data)
     for data_stripe in data_stripes:
-        file_stripe = FileStripe(hash=get_hash(data_stripe), id=get_unique_id(), is_parity=False)
+        file_stripe = FileStripe(
+            hash=get_hash(data_stripe), id=get_unique_id(), is_parity=False
+        )
         file.stripes.append(file_stripe)
         save_temp_stripe(file_stripe.id, data_stripe)
     parity_data = get_parity(*data_stripes)
@@ -82,15 +84,30 @@ def abstract_file(absolute_path: str) -> File:
     return file
 
 
+def append_to_file(file_id: str, data: bin):
+    """APPENDS DATA (BYTES) TO FILE IN BACKUPS FOLDER"""
+    with open(FPATH + file_id, "ab") as f:
+        f.write(data)
+
+
 def encode_for_json(data: bytes) -> str:
+    """ENCODES DATA TO BASE64 STRING"""
     return str(base64.b64encode(data), encoding="ASCII")
 
 
 def decode_from_json(data: str) -> bytes:
+    """DECODES BASE64 STRING TO BYTES"""
     return base64.b64decode(data)
 
 
+def remove_temp_stripe(id: str):
+    """REMOVES TEMP STRIPE BY ID"""
+    os.remove("temp/stripes/" + id)
 
 
-
-
+def update_stripe_location(file: File, stripe_id: str, location: str):
+    """UPDATES STRIPE LOCATION (PEER NAME) BY FILE AND STRIPE ID"""
+    for stripe in file.stripes:
+        if stripe.id == stripe_id:
+            stripe.location = location
+            return
