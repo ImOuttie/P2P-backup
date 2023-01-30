@@ -10,6 +10,7 @@ STRIPE_ID = str
 class FileStripe:
     hash: str
     is_parity: bool
+    is_first: bool
     id: STRIPE_ID = str
     location: str = field(default_factory=str)  # name of user who stores file
 

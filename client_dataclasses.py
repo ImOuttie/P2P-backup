@@ -7,6 +7,7 @@ class FileStripe:
     hash: str
     id: str
     is_parity: bool
+    is_first: bool
     location: str = field(default_factory=str)  # name of peer who stores file
 
 

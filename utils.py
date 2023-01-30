@@ -3,7 +3,7 @@ import os
 from itertools import cycle, islice
 
 from settings import *
-from typing import Tuple
+from typing import Tuple, List
 import uuid
 from hashlib import md5
 from client_dataclasses import File, FileStripe
@@ -40,9 +40,9 @@ def fragment_data(data: bytes) -> Tuple[bytes, bytes]:
 def defragment_data(data1: bytes, data2: bytes) -> bytes:
     """defragments data stripes and returns the original data"""
     defrag = []
-    for bit1, bit2 in zip(data1, data2):
-        defrag.append(bit1)
-        defrag.append(bit2)
+    for byte1, byte2 in zip(data1, data2):
+        defrag.append(byte1)
+        defrag.append(byte2)
     if len(data1) > len(data2):
         defrag.append(data1[-1])
     elif len(data2) > len(data1):
@@ -63,6 +63,11 @@ def save_temp_stripe(id: str, data: bytes, temppath="temp/stripes/"):
         f.write(data)
 
 
+def save_file_in_restore(name: str, data, temppath=RESTORE_PATH):
+    with open(temppath + name, "wb") as f:
+        f.write(data)
+
+
 def abstract_file(absolute_path: str) -> File:
     """reads file and creates matching dataclass representation of it
     also saves all stripes of file (including parity) in temp folder"""
@@ -72,14 +77,15 @@ def abstract_file(absolute_path: str) -> File:
     file_hash = get_hash(data)
     file = File(name=name, hash=file_hash, len=len(data), absolute_path=absolute_path)
     data_stripes = fragment_data(data)
+    first = True
     for data_stripe in data_stripes:
-        file_stripe = FileStripe(
-            hash=get_hash(data_stripe), id=get_unique_id(), is_parity=False
-        )
+        file_stripe = FileStripe(hash=get_hash(data_stripe), id=get_unique_id(), is_parity=False, is_first=True)
         file.stripes.append(file_stripe)
         save_temp_stripe(file_stripe.id, data_stripe)
+        if first:
+            first = False
     parity_data = get_parity(*data_stripes)
-    parity = FileStripe(hash=get_hash(parity_data), id=get_unique_id(), is_parity=True)
+    parity = FileStripe(hash=get_hash(parity_data), id=get_unique_id(), is_parity=True, is_first=False)
     file.stripes.append(parity)
     save_temp_stripe(parity.id, parity_data)
     return file
@@ -115,3 +121,33 @@ def update_stripe_location(file: File, stripe_id: str, location: str):
         if stripe.id == stripe_id:
             stripe.location = location
             return
+
+
+def find_file_by_name(files: List[File], filename: str) -> File | None:
+    """FINDS AND RETURNS FILE (DATACLASS REPRESENTATION) FROM LIST OF FILES BY FILENAME, IF NOT FOUND RETURNS NONE"""
+    for file in files:
+        if file.name == filename:
+            return file
+    return None
+
+
+def get_data_from_parity_with_ids(stripe_id: str, parity_id: str, first: bool) -> bytes:
+    with open(RESTORE_TEMP_PATH + stripe_id, "rb") as f:
+        stripe_data = f.read()
+    with open(RESTORE_TEMP_PATH + parity_id, "rb") as f:
+        parity_data = f.read()
+    other_stripe = get_stripe_with_parity(stripe_data, parity_data)
+    if first:
+        return defragment_data(stripe_data, other_stripe)
+    return defragment_data(other_stripe, stripe_data)
+
+
+def get_data_from_stripe_ids(id_first: str, id_second: str, ordered=True):
+    with open(RESTORE_TEMP_PATH + id_first, "rb") as f:
+        first_data = f.read()
+    with open(RESTORE_TEMP_PATH + id_second, "rb") as f:
+        second_data = f.read()
+    if ordered:
+        return defragment_data(first_data, second_data)
+    return defragment_data(second_data, first_data)
+

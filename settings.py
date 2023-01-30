@@ -11,4 +11,6 @@ CLIENT_PORT = 30001
 CLIENT_IP = "0.0.0.0"
 LOGLEVEL = 1
 FPATH = r"backups\\"
+RESTORE_PATH = r"restore\\"
+RESTORE_TEMP_PATH = r"temp\for_restore\\"
 BYTEORDER = sys.byteorder

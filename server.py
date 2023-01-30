@@ -24,7 +24,6 @@ class Server:
         self.sock.bind((SERVER_IP, SERVER_PORT))
         self.clients: Dict[ADDRESS, NAME] = {}
         self.names: Dict[NAME, ADDRESS] = {}
-        self.files: Dict[NAME, Files] = {}
         self.file_names: Dict[NAME, Dict[FILENAME, File]]
         self.tasks: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.users: Dict[NAME, User] = {}
@@ -36,11 +35,9 @@ class Server:
         self.clients[address] = name
         self.names[name] = address
         self.users[name] = User(name=name, current_addr=address)
-        self.files[name] = []
 
     def remove_client(self, address):
         try:
-            del self.files[self.clients[address]]
             del self.users[self.clients[address]]
             del self.names[self.clients[address]]
             del self.clients[address]
@@ -67,9 +64,9 @@ class Server:
 
     def handle_file_req(self, user: str, request: SendFileReq):
         new_file = File(owner=user, hash=request.hash, name=request.file_name, len=request.size)
-        self.files[user].append(new_file)
+        self.users[user].owned_files.append(new_file)
         for stripe in request.stripes:
-            new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"])
+            new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"], is_first=stripe["is_first"])
             new_file.stripes.append(new_stripe)
         print(f"new file: {new_file}")
         self.tasks.append((None, {"task": "find_location_for_data", "client": user, "file": new_file}))
@@ -83,7 +80,7 @@ class Server:
             availables.append(user)
             if len(availables) == 3:
                 return availables
-        # TODO: FIX ASSUMPTION THAT ALL CLIENTS ARE AVAILABLE, CHECK FOR LENGTH
+        # TODO: FIX ASSUMPTION THAT ALL CLIENTS ARE AVAILABLE, CHECK FOR SIZE
         return None
 
     def send_addrs_to_client(self, owner: User, users: List[User], file: File):
@@ -92,8 +89,29 @@ class Server:
         file_stripes = []
         for user, filestripe in zip(users, file.stripes):
             file_stripes.append({"id": filestripe.id, "peer": user.name, "addr": user.current_addr})
+            filestripe.location = user.name
         resp = SendFileResp(file_name=file.name, stripes=file_stripes)
         self.send_to_client(resp, owner.current_addr)
+
+    def send_file_list(self, request: GetFileList, addr: tuple):
+        self.send_to_client(FileListResp(files=[file.name for file in self.users[self.clients[addr]].owned_files]), addr)
+
+    def handle_file_request(self, req: GetFileReq, addr: tuple):
+        user = self.users[self.clients[addr]]
+        file = find_file_by_name(user.owned_files, req.file_name)
+        if not file:
+            # TODO: HANDLE
+            return
+        dicts = []
+        count = 0
+        for stripe in file.stripes:
+            # TODO: CHECK IF CLIENT IS AVAILABLE
+            self.create_connection(self.names[stripe.location], addr)
+            dicts.append({"id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first, "peer": stripe.location, "addr": self.names[stripe.location]})
+            count += 1
+            if count == 2:
+                break
+        self.send_to_client(GetFileResp(file_name=req.file_name, stripes=dicts), addr)
 
     def handle_self(self, task: dict):
         match task["task"]:
@@ -109,8 +127,14 @@ class Server:
     def handle_client(self, client_addr, msg: dict):
         match msg["cmd"]:
             case "send_file_req":
-                file_req_msg = SendFileReq(file_name=msg["name"], hash=msg["hash"], size=msg["len"], stripes=msg["stripes"])
+                file_req_msg = SendFileReq(file_name=msg["name"], hash=msg["hash"], size=msg["size"], stripes=msg["stripes"])
                 self.handle_file_req(self.clients[client_addr], file_req_msg)
+                return
+            case "get_file_list":
+                self.send_file_list(GetFileList(), client_addr)
+                return
+            case "get_file_req":
+                self.handle_file_request(GetFileReq(file_name=msg["file"]), addr=client_addr)
                 return
         logging.debug(f"Message contained invalid command: {msg}")
 

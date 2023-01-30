@@ -67,7 +67,7 @@ class SendFileReq(Message):
             "cmd": self._cmd,
             "name": self.file_name,
             "hash": self.hash,
-            "len": self.size,
+            "size": self.size,
             "stripes": self.stripes
         }
 
@@ -116,7 +116,85 @@ class AppendStripe(Message):
         }
 
 
+class GetFileList(Message):
+    def __init__(self):
+        self._cmd = "get_file_list"
 
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd
+        }
+
+
+class FileListResp(Message):
+    FILENAME = str
+
+    def __init__(self, files: List[FILENAME]):
+        self._cmd = "file_list_resp"
+        self.files = files
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "files": self.files
+        }
+
+
+class GetFileReq(Message):
+    def __init__(self, file_name: str):
+        self._cmd = "get_file_req"
+        self.file_name = file_name
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "file": self.file_name
+        }
+
+
+class GetFileResp(Message):
+
+    def __init__(self, file_name: str, stripes: List[dict]):
+        self._cmd = "get_file_resp"
+        self.file_name = file_name
+        self.stripes = stripes
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "file": self.file_name,
+            "stripes": self.stripes
+        }
+
+
+class GetStripe(Message):
+
+    def __init__(self, stripe_id: str):
+        self._cmd = "get_stripe"
+        self.stripe_id = stripe_id
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "id": self.stripe_id
+        }
+
+
+class GetStripeResp(Message):
+
+    def __init__(self, stripe_id: str, seq: int, raw: str):
+        self._cmd = "get_stripe_resp"
+        self.stripe_id = stripe_id
+        self.raw = raw
+        self.seq = seq
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "id": self.stripe_id,
+            "seq": self.seq,
+            "raw": self.raw
+        }
 
 def message_reader(msg: dict) -> Message:
     """" READS PROTOCOL MESSAGE AND RETURNS MATCHING MESSAGE CLASS INSTANCE"""
@@ -136,6 +214,14 @@ def message_reader(msg: dict) -> Message:
                 return NewStripe(id=msg["id"], size=msg["size"])
             case "append_stripe":
                 return AppendStripe(id=msg["id"], raw=msg["raw"])
+            case "get_file_list":
+                return GetFileList()
+            case "file_list_resp":
+                return FileListResp(files=msg["files"])
+            case "get_file_req":
+                return GetFileReq(file_name=msg["file"])
+            case "get_file_resp":
+                return GetFileResp(file_name=msg["file"], stripes=msg["stripes"])
         raise Exception(f"message contains command that doesn't exist: {msg}")
     except KeyError:
         raise KeyError(f"message contains invalid key: {msg}")
