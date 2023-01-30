@@ -1,16 +1,13 @@
-import json
 import logging
-import os
 import socket
 import time
-import sys
-from settings import *
-from utils import *
 from collections import deque
 from threading import Thread
 from typing import List, Optional, Tuple, Deque, Dict
-from hashlib import md5
 from client_dataclasses import *
+from protocol import *
+from settings import *
+from utils import *
 
 FILE_NAME: str
 
@@ -25,13 +22,12 @@ class Client:
         self.wait_queue: Dict[Tuple, List] = {}
         self.peers: Dict[Tuple, str] = {}
         self.peer_names: Dict[str, Tuple] = {}
-        self.stop_annoying_me = True
         self.files_on_server: Dict[FILE_NAME, File] = {}
 
-    def connect_to_peer(self, peer_name: str, peer_addr: tuple) -> bool:
-        print(f"connecting to peer: {peer_name} on address {peer_addr}")
-        data = json.dumps({"cmd": "connect", "name": self.name}).encode()
-        self.sock.sendto(data, peer_addr)
+    def connect_to_peer(self, msg: ConnectToPeer) -> bool:
+        print(f"connecting to peer: {msg.peer_name} on address {msg.peer_address}")
+        connect_msg = Connect(name=self.name)
+        self.send_to_peer(connect_msg, msg.peer_address)
         return False  # task not finished until received connection
 
     def remove_peer(self, address):
@@ -47,57 +43,49 @@ class Client:
         self.peers[addr] = name
         self.peer_names[name] = addr
 
-    def create_file(self, file_id: str):
+    @staticmethod
+    def create_file(file_id: str):
         try:
             with open(FPATH + file_id, "x"):
                 ...
         except FileExistsError:
             logging.debug(f"file already exists: {file_id}")
-        self.stop_annoying_me = True
         return
 
     def req_send_file(self, absolute_path: str):
         file = abstract_file(absolute_path)
         dicts = [{"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity} for stripe in file.stripes]
         self.files_on_server[file.name] = file
-        self.send_to_server(
-            {
-                "cmd": "send_file_req",
-                "name": file.name,
-                "hash": file.hash,
-                "len": file.len,
-                "stripes": dicts,
-            }
-        )
+        request = SendFileReq(file_name=file.name, hash=file.hash, size=file.len, stripes=dicts)
+        self.send_to_server(request)
 
     def send_stripe(self, stripe_id: str, peer_addr: tuple):
         with open("temp/stripes/" + stripe_id, "rb") as f:
             data = f.read()
         data = encode_for_json(data)
-        self.send_to_peer({"cmd": "new_stripe", "id": stripe_id, "size": len(data)}, peer_addr)
+        new_stripe_msg = NewStripe(id=stripe_id, size=len(data))
+        self.send_to_peer(new_stripe_msg, peer_addr)
         time.sleep(0.1)
         k = 0
         while k * 1024 < len(data):
-            to_send = {"cmd": "append_stripe", "id": stripe_id, "raw": data[k * 1024: (k+1) * 1024]}
-            self.send_to_peer(to_send, peer_addr)
+            append_stripe_msg = AppendStripe(id=stripe_id, raw=data[k * 1024: (k+1) * 1024])
+            self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
         # TEMP STRIPE NO LONGER NEEDED:
         remove_temp_stripe(stripe_id)
 
-    def handle_file_resp(self, response: dict):
-        file_name = response["name"]
-        for resp in response["stripes"]:
+    def handle_file_resp(self, response: SendFileResp):
+        file_name = response.file_name
+        for resp in response.stripes:
             self.send_stripe(resp["id"], tuple(resp["addr"]))
             update_stripe_location(self.files_on_server[file_name], resp["id"], resp["peer"])
 
     def handle_server(self, msg: dict) -> bool:
         match msg["cmd"]:
             case "connect_to_peer":
-                peer_addr = tuple(msg["peer_address"])  # json doesn't support tuples
-                peer_name = msg["name"]
-                return self.connect_to_peer(peer_name, peer_addr)
+                return self.connect_to_peer(ConnectToPeer(peer_name=msg["name"], peer_address=tuple(msg["peer_address"])))
             case "send_file_resp":
-                self.handle_file_resp(msg)
+                self.handle_file_resp(SendFileResp(file_name=msg["name"], stripes=msg["stripes"]))
 
     def handle_peer(self, task: Tuple[tuple, dict]):
         msg = task[1]
@@ -113,12 +101,12 @@ class Client:
             case "append_stripe":
                 append_to_file(msg["id"], decode_from_json(msg["raw"]))
 
-    def send_to_peer(self, msg: dict, addr: tuple):
-        data = json.dumps(msg).encode()
+    def send_to_peer(self, msg: Message, addr: tuple):
+        data = json.dumps(msg.to_dict()).encode()
         self.sock.sendto(data, addr)
 
-    def send_to_server(self, msg: dict):
-        data = json.dumps(msg).encode()
+    def send_to_server(self, msg: Message):
+        data = json.dumps(msg.to_dict()).encode()
         self.sock.sendto(data, self._server_addr)
 
     def handle_tasks(self):
@@ -172,7 +160,8 @@ def main():
     task_thread = Thread(target=client.handle_tasks)
     receive_thread.start()
     task_thread.start()
-    client.send_to_server({"cmd": "connect", "name": client.name, "register": True})
+    connect_msg = Connect(name=client.name, register=True)
+    client.send_to_server(connect_msg)
     if name == "alice":
         time.sleep(1.5)
         client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")

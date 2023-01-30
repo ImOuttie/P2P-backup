@@ -1,3 +1,4 @@
+import binascii
 import os
 from itertools import cycle, islice
 
@@ -102,7 +103,10 @@ def decode_from_json(data: str) -> bytes:
 
 def remove_temp_stripe(id: str):
     """REMOVES TEMP STRIPE BY ID"""
-    os.remove("temp/stripes/" + id)
+    try:
+        os.remove("temp/stripes/" + id)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"No such temp stripe: {id}")
 
 
 def update_stripe_location(file: File, stripe_id: str, location: str):

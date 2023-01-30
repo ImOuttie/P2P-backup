@@ -10,7 +10,7 @@ import time
 from typing import List, Tuple, Dict, Deque
 from dataclasses import dataclass, field
 from server_dataclasses import *
-
+from protocol import *
 
 Files = List[File]
 NAME = str
@@ -31,12 +31,12 @@ class Server:
         self.task_wait_queue: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.avg_storage = 4
 
-    def add_client(self, name: str, address: Tuple):
+    def add_client(self, msg: Connect, address: tuple):
+        name = msg.name
         self.clients[address] = name
         self.names[name] = address
         self.users[name] = User(name=name, current_addr=address)
         self.files[name] = []
-        logging.debug(f"Client connected: {name, address}")
 
     def remove_client(self, address):
         try:
@@ -47,27 +47,16 @@ class Server:
         except KeyError:
             print(f"No such client: {address}")
 
+    def send_to_client(self, msg: Message, addr: tuple):
+        data = json.dumps(msg.to_dict()).encode()
+        self.sock.sendto(data, addr)
+
     def create_connection(self, client1: tuple, client2: tuple):
-        logging.debug(
-            f"Creating connection between {self.clients[client1]}: {client1} and"
-            f" {self.clients[client2]}: {client2}"
-        )
-        data1 = json.dumps(
-            {
-                "cmd": "connect_to_peer",
-                "peer_address": client1,
-                "name": self.clients[client1],
-            }
-        ).encode()
-        data2 = json.dumps(
-            {
-                "cmd": "connect_to_peer",
-                "peer_address": client2,
-                "name": self.clients[client2],
-            }
-        ).encode()
-        self.sock.sendto(data2, client1)
-        self.sock.sendto(data1, client2)
+        logging.debug(f"Creating connection between {self.clients[client1]}: {client1} and {self.clients[client2]}: {client2}")
+        connect_msg1 = ConnectToPeer(peer_name=self.clients[client1], peer_address=client1)
+        connect_msg2 = ConnectToPeer(peer_name=self.clients[client2], peer_address=client2)
+        self.send_to_client(connect_msg1, client2)
+        self.send_to_client(connect_msg2, client1)
 
     def find_connection(self, client_addr: Tuple) -> Tuple | None:
         for client in self.clients.keys():
@@ -76,10 +65,10 @@ class Server:
         # if not found client return none
         return
 
-    def handle_file_req(self, user: str, request: dict):
-        new_file = File(owner=user, hash=request["hash"], name=request["name"], len=request["len"])
+    def handle_file_req(self, user: str, request: SendFileReq):
+        new_file = File(owner=user, hash=request.hash, name=request.file_name, len=request.size)
         self.files[user].append(new_file)
-        for stripe in request["stripes"]:
+        for stripe in request.stripes:
             new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"])
             new_file.stripes.append(new_stripe)
         print(f"new file: {new_file}")
@@ -103,8 +92,8 @@ class Server:
         file_stripes = []
         for user, filestripe in zip(users, file.stripes):
             file_stripes.append({"id": filestripe.id, "peer": user.name, "addr": user.current_addr})
-        data = json.dumps({"cmd": "send_file_resp", "name": file.name, "stripes": file_stripes}).encode()
-        self.sock.sendto(data, owner.current_addr)
+        resp = SendFileResp(file_name=file.name, stripes=file_stripes)
+        self.send_to_client(resp, owner.current_addr)
 
     def handle_self(self, task: dict):
         match task["task"]:
@@ -119,15 +108,11 @@ class Server:
 
     def handle_client(self, client_addr, msg: dict):
         match msg["cmd"]:
-            case "get_connection":
-                client = self.find_connection(client_addr)
-                if not client:
-                    self.tasks.append((client_addr, msg))
-                    return
-                self.create_connection(client_addr, client)
             case "send_file_req":
-                name = self.clients[client_addr]
-                self.handle_file_req(name, msg)
+                file_req_msg = SendFileReq(file_name=msg["name"], hash=msg["hash"], size=msg["len"], stripes=msg["stripes"])
+                self.handle_file_req(self.clients[client_addr], file_req_msg)
+                return
+        logging.debug(f"Message contained invalid command: {msg}")
 
     def handle_tasks(self):
         while True:
@@ -153,15 +138,14 @@ class Server:
             try:
                 if address in self.clients:
                     msg = json.loads(data.decode())
-                    logging.debug(
-                        f"Received message: {msg} from {self.clients[address]}"
-                    )
+                    logging.debug(f"Received message: {msg} from {self.clients[address]}")
                     self.tasks.append((address, msg))
                 else:
                     msg = json.loads(data.decode())
                     logging.debug(f"Received message: {msg} from {address}")
                     if msg["cmd"] == "connect" and msg["register"]:
-                        self.add_client(msg["name"], address)
+                        self.add_client(Connect(name=msg["name"], register=msg["register"]), address)
+                        # TODO: HANDLE NON REGISTER CONNECTION
             except json.JSONDecodeError:
                 print(f"Invalid msg: {data.decode()}")
 
