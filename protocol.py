@@ -89,30 +89,34 @@ class SendFileResp(Message):
 
 
 class NewStripe(Message):
-    def __init__(self, id: str, size: int):
+    def __init__(self, id: str, size: int, amount: int):
         self.cmd = "new_stripe"
         self.id = id
         self.size = size
+        self.amount = amount
 
     def to_dict(self) -> dict:
         return {
             "cmd": self.cmd,
             "id": self.id,
-            "size": self.size
+            "size": self.size,
+            "amount": self.amount
         }
 
 
 class AppendStripe(Message):
-    def __init__(self, id: str, raw: str):
+    def __init__(self, id: str, raw: str, seq: int):
         self.cmd = "append_stripe"
         self.id = id
         self.raw = raw
+        self.seq = seq
 
     def to_dict(self) -> dict:
         return {
             "cmd": self.cmd,
             "id": self.id,
-            "raw": self.raw
+            "raw": self.raw,
+            "seq": self.seq,
         }
 
 
@@ -182,11 +186,26 @@ class GetStripe(Message):
 
 class GetStripeResp(Message):
 
-    def __init__(self, stripe_id: str, seq: int, raw: str):
+    def __init__(self, stripe_id: str, amount: int):
         self._cmd = "get_stripe_resp"
         self.stripe_id = stripe_id
-        self.raw = raw
+        self.amount = amount
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "id": self.stripe_id,
+            "amount": self.amount
+        }
+
+
+class AppendGetStripe(Message):
+
+    def __init__(self, stripe_id: str, seq: int, raw: str):
+        self._cmd = "append_get_stripe"
+        self.stripe_id = stripe_id
         self.seq = seq
+        self.raw = raw
 
     def to_dict(self) -> dict:
         return {
@@ -195,6 +214,7 @@ class GetStripeResp(Message):
             "seq": self.seq,
             "raw": self.raw
         }
+
 
 def message_reader(msg: dict) -> Message:
     """" READS PROTOCOL MESSAGE AND RETURNS MATCHING MESSAGE CLASS INSTANCE"""
