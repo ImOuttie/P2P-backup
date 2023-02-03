@@ -1,4 +1,5 @@
 import logging
+import json
 import os.path
 import socket
 import time
@@ -100,6 +101,7 @@ class Client:
             append_stripe_msg = AppendStripe(id=stripe_id, seq=k+1, raw=data[k * 900: (k+1) * 900])
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
+            time.sleep(SEND_DELAY)
         # TEMP STRIPE NO LONGER NEEDED:
         remove_temp_stripe(stripe_id)
 
@@ -117,6 +119,7 @@ class Client:
         k = 0
         while k * 900 < len(data):
             self.send_to_peer(AppendGetStripe(stripe_id=msg.stripe_id, seq=k+1, raw=data[k * 900: (k+1) * 900]), peer_addr)
+            time.sleep(SEND_DELAY)
             k += 1
 
     def handle_get_stripe_resp(self, msg: GetStripeResp):
@@ -170,10 +173,9 @@ class Client:
         # self.wait_queue.append(task)
 
     def combine_stripes(self, file: TempFile):
-        if file.name in self.temp_restore_files:
+        if file.name not in self.temp_restore_files:
             # CALLED TWICE (RACE CONDITION)
             return
-        print("called")
         parity_id = None
         stripe_id = None
         last_stripe_is_first = False
@@ -295,12 +297,12 @@ def main():
         client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")
         time.sleep(2)
         client.request_file_list()
-        time.sleep(1)
+        time.sleep(1.5)
         client.request_file("text.txt")
-        # time.sleep(2)
-        # client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\video.mp4")
-        # time.sleep(30)
-        # client.request_file("video.mp4")
+        time.sleep(3)
+        client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\video.mp4")
+        time.sleep(45)
+        client.request_file("video.mp4")
 
 
 if __name__ == "__main__":

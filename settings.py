@@ -15,3 +15,4 @@ RESTORE_PATH = r"restore\\"
 RESTORE_TEMP_PATH = r"temp\for_restore\\"
 UNFINISHED_STRIPE_PATH = r"temp\not_final\\"
 BYTEORDER = sys.byteorder
+SEND_DELAY = 0.01

@@ -1,16 +1,18 @@
+from utils import *
+
+from server_dataclasses import *
+from protocol import *
+from settings import *
 import json
 import logging
 import socket
 import threading
-from settings import *
-from utils import *
 from collections import deque
 from threading import Thread
 import time
 from typing import List, Tuple, Dict, Deque
 from dataclasses import dataclass, field
-from server_dataclasses import *
-from protocol import *
+
 
 Files = List[File]
 NAME = str
@@ -56,7 +58,7 @@ class Server:
         self.send_to_client(connect_msg2, client1)
 
     def find_connection(self, client_addr: Tuple) -> Tuple | None:
-        for client in self.clients.keys():
+        for client in self.clients:
             if client != client_addr:
                 return client
         # if not found client return none

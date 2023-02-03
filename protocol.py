@@ -1,6 +1,7 @@
-import json
-from dataclasses import dataclass
 from typing import List, Dict, Any
+
+stripe = Dict[str, tuple | str]
+FILENAME = str
 
 
 class Message:
@@ -73,7 +74,6 @@ class SendFileReq(Message):
 
 
 class SendFileResp(Message):
-    stripe = Dict[str, tuple | str]
 
     def __init__(self, file_name: str, stripes: List[stripe]):
         self._cmd = "send_file_resp"
@@ -131,7 +131,6 @@ class GetFileList(Message):
 
 
 class FileListResp(Message):
-    FILENAME = str
 
     def __init__(self, files: List[FILENAME]):
         self._cmd = "file_list_resp"
