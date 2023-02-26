@@ -16,7 +16,7 @@ FILE_NAME: str
 STRIPE_ID: str
 NAME: str
 FINAL_IN_SEQ: int
-
+TASK: dict
 
 class Client:
     def __init__(self, name: str, port: int):
@@ -24,8 +24,8 @@ class Client:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((CLIENT_IP, port))
         self._server_addr = (SERVER_IP, SERVER_PORT)
-        self.tasks: Deque[Tuple, dict] = deque()  # deque of (address, task)
-        self.wait_queue: Deque[Tuple[Tuple | None, Dict]] = deque()
+        self.tasks: Deque[Tuple[tuple | None, TASK]] = deque()  # deque of (address, task)
+        self.task_wait_queue: Deque[tuple[Tuple | None, TASK]] = deque()
         self.peers: Dict[Tuple, NAME] = {}
         self.peer_names: Dict[NAME, Tuple] = {}
         self.files_on_server: Dict[FILE_NAME, File] = {}
@@ -82,7 +82,10 @@ class Client:
 
     def req_send_file(self, absolute_path: str):
         file = abstract_file(absolute_path)
-        dicts = [{"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first} for stripe in file.stripes]
+        dicts = [
+            {"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first}
+            for stripe in file.stripes
+        ]
         self.files_on_server[file.name] = file
         request = SendFileReq(file_name=file.name, hash=file.hash, size=file.len, stripes=dicts)
         self.send_to_server(request)
@@ -91,34 +94,32 @@ class Client:
         with open("temp/stripes/" + stripe_id, "rb") as f:
             data = f.read()
         data = encode_for_json(data)
-        print(f"len data: {len(data)}")
-        new_stripe_msg = NewStripe(id=stripe_id, size=len(data), amount=ceil(len(data)/900))
+        new_stripe_msg = NewStripe(id=stripe_id, size=len(data), amount=ceil(len(data) / MAX_RAW_SIZE))
         self.send_to_peer(new_stripe_msg, peer_addr)
         time.sleep(0.1)
         k = 0
-        while k * 900 < len(data):
-            print(f"seq: {k+1}")
-            append_stripe_msg = AppendStripe(id=stripe_id, seq=k+1, raw=data[k * 900: (k+1) * 900])
+        while k * MAX_RAW_SIZE < len(data):
+            append_stripe_msg = AppendStripe(id=stripe_id, seq=k + 1, raw=data[k * MAX_RAW_SIZE : (k + 1) * MAX_RAW_SIZE])
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
             time.sleep(SEND_DELAY)
         # TEMP STRIPE NO LONGER NEEDED:
-        remove_temp_stripe(stripe_id)
+        remove_temp_stripes(stripe_id, path=TEMP_STRIPE_PATH)
 
     def handle_get_stripe(self, msg: GetStripe, peer_addr: tuple):
-        if not os.path.isfile(BACKUP_PATH + msg.stripe_id):
-            self.wait_queue.append((None, {"cmd": "handle_get_stripe", "msg": msg, "addr": peer_addr}))
+        stripe_id = msg.stripe_id
+        if not os.path.isfile(BACKUP_PATH + stripe_id):
+            self.task_wait_queue.append((None, {"cmd": "handle_get_stripe", "msg": msg, "addr": peer_addr}))
             return
-        # TODO: CHECK IF STRIPE IS COMPELTE (OR WAIT MAYBE THAT"S WHY THE ISPATH
-        with open(BACKUP_PATH + msg.stripe_id, "rb") as f:
+        with open(BACKUP_PATH + stripe_id, "rb") as f:
             data = f.read()
         data = encode_for_json(data)
-        amount = ceil(len(data)/900)
-        self.send_to_peer(GetStripeResp(stripe_id=msg.stripe_id, amount=amount), peer_addr)
+        amount = ceil(len(data) / MAX_RAW_SIZE)
+        self.send_to_peer(GetStripeResp(stripe_id=stripe_id, amount=amount), peer_addr)
         time.sleep(0.1)
         k = 0
-        while k * 900 < len(data):
-            self.send_to_peer(AppendGetStripe(stripe_id=msg.stripe_id, seq=k+1, raw=data[k * 900: (k+1) * 900]), peer_addr)
+        while k * MAX_RAW_SIZE < len(data):
+            self.send_to_peer(AppendGetStripe(stripe_id=stripe_id, seq=k+1, raw=data[k * MAX_RAW_SIZE: (k+1) * MAX_RAW_SIZE]), peer_addr)
             time.sleep(SEND_DELAY)
             k += 1
 
@@ -127,11 +128,26 @@ class Client:
             ...
         self.unfinished_restore_stripes[msg.stripe_id].max_seq = msg.amount
 
+    def handle_previous_seq(self, msg: AppendGetStripe | AppendStripe):
+        if isinstance(msg, AppendStripe):
+            self.append_peer_stripe(msg)
+            return
+        if isinstance(msg, AppendGetStripe):
+            self.handle_append_get_stripe(msg)
+            return
+        raise Exception(f"handle_previous_seq received msg type not containing seq: {msg.to_dict()}")
+
+    def handle_bad_seq(self, msg: AppendGetStripe | AppendStripe):
+        self.task_wait_queue.append((None, {"cmd": "handle_previous_seq", "msg": msg}))
+
     def handle_append_get_stripe(self, msg: AppendGetStripe):
         data = decode_from_json(msg.raw)
         with open(RESTORE_TEMP_PATH + msg.stripe_id, "ab") as f:
             f.write(data)
         stripe = self.unfinished_restore_stripes[msg.stripe_id]
+        if not msg.seq == stripe.cur_seq + 1:
+            self.handle_bad_seq(msg)
+        stripe.cur_seq += 1
         if msg.seq == stripe.max_seq:
             stripe.complete = True
             self.unfinished_restore_stripes.pop(msg.stripe_id)
@@ -139,7 +155,7 @@ class Client:
             for stripe in parent_file.stripes:
                 if not stripe.complete:
                     return
-                self.combine_stripes(parent_file)
+            self.combine_stripes(parent_file)
 
     def handle_file_resp(self, response: SendFileResp):
         file_name = response.file_name
@@ -164,15 +180,20 @@ class Client:
         file = TempFile(name=resp.file_name)
         self.temp_restore_files[resp.file_name] = file
         for stripe in resp.stripes:
-            temp_stripe = TempStripe(id=stripe["id"], is_parity=stripe["is_parity"], peer_name=stripe["peer"], peer_addr=stripe["addr"],
-                                     is_first=stripe["is_first"], parent_file=resp.file_name)
+            temp_stripe = TempStripe(
+                id=stripe["id"],
+                is_parity=stripe["is_parity"],
+                peer_name=stripe["peer"],
+                peer_addr=stripe["addr"],
+                is_first=stripe["is_first"],
+                parent_file=resp.file_name,
+            )
             file.stripes.append(temp_stripe)
             self.unfinished_restore_stripes[temp_stripe.id] = temp_stripe
             self.get_stripe_from_peer(temp_stripe)
-        # task = (None, {"cmd": "combine_stripes", "file_name": resp.file_name, "stripes": file_stripes})
-        # self.wait_queue.append(task)
 
     def combine_stripes(self, file: TempFile):
+        # SHOULD ONLY BE CALLED IF ALL STRIPES IN TEMP FILE HAVE BEEN SAVED COMPLETELY (NOT STILL RECEIVING APPENDS)
         if file.name not in self.temp_restore_files:
             # CALLED TWICE (RACE CONDITION)
             return
@@ -181,9 +202,7 @@ class Client:
         last_stripe_is_first = False
         for stripe in file.stripes:
             if not stripe.complete:
-                # self.wait_queue.append((None, file))
-                print(self.temp_restore_files)
-                return
+                raise Exception(f"combine_stripes() was called with temp file containing incomplete temp stripes: {file}")
             if stripe.is_parity:
                 parity_id = stripe.id
                 continue
@@ -194,7 +213,9 @@ class Client:
             save_file_in_restore(file.name, original_data)
             self.temp_restore_files.pop(file.name)
             return
-        original_data = get_data_from_stripe_ids(*[stripe.id for stripe in file.stripes], ordered=not last_stripe_is_first)
+        original_data = get_data_from_stripe_ids(
+            *[file_stripe.id for file_stripe in file.stripes], ordered=not last_stripe_is_first)
+        remove_temp_stripes(*[file_stripe.id for file_stripe in file.stripes], path=RESTORE_TEMP_PATH)
         save_file_in_restore(file.name, original_data)
         self.temp_restore_files.pop(file.name)
 
@@ -202,6 +223,8 @@ class Client:
         match msg["cmd"]:
             case "handle_get_stripe":
                 self.handle_get_stripe(msg["msg"], msg["addr"])
+            case "handle_previous_seq":
+                self.handle_previous_seq(msg["msg"])
 
     def handle_server(self, msg: dict):
         match msg["cmd"]:
@@ -237,17 +260,16 @@ class Client:
     def handle_tasks(self):
         while True:
             if not self.tasks:
-                if not self.wait_queue:
+                if not self.task_wait_queue:
                     time.sleep(0)  # release GIL
                     continue
                 time.sleep(0.1)
-                task = self.wait_queue.popleft()
-
+                task = self.task_wait_queue.popleft()
             else:
                 task = self.tasks.popleft()
             addr = task[0]
             msg = task[1]
-            logging.debug(f"the current task is {task if len(msg) < 200 else msg['cmd']}")
+            logging.debug(f"the current task is {task if len(msg) < 120 else msg['cmd']}")
             if addr == self._server_addr:
                 self.handle_server(msg)  # if task not finished
                 continue

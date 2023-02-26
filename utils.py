@@ -53,23 +53,23 @@ def defragment_data(data1: bytes, data2: bytes) -> bytes:
 def get_stripe_with_parity(stripe: bytes, parity: bytes) -> bytes:
     """uses parity data and a data stripe to return the other missing data stripe.
     this is essentially virtual RAID 5"""
-    return (
-        int.from_bytes(parity, BYTEORDER) ^ int.from_bytes(stripe, BYTEORDER)
-    ).to_bytes(len(parity), BYTEORDER)
+    return (int.from_bytes(parity, BYTEORDER) ^ int.from_bytes(stripe, BYTEORDER)).to_bytes(len(parity), BYTEORDER)
 
 
 def save_temp_stripe(id: str, data: bytes, temppath="temp/stripes/"):
+    # NEEDS REFACTORING (SAME FUNCTIONALITY AS save_file_in_restore
     with open(temppath + id, "wb") as f:
         f.write(data)
 
 
-def save_file_in_restore(name: str, data, temppath=RESTORE_PATH):
-    with open(temppath + name, "wb") as f:
+def save_file_in_restore(name: str, data, path=RESTORE_PATH):
+    """ " WRITES DATA TO FILE AND SAVES IT IN RESTORE PATH UNLESS SPECIFIED OTHERWISE"""
+    with open(path + name, "wb") as f:
         f.write(data)
 
 
 def abstract_file(absolute_path: str) -> File:
-    """reads file and creates matching dataclass representation of it
+    """reads file and creates matching dataclass representation of it.
     also saves all stripes of file (including parity) in temp folder"""
     with open(absolute_path, "rb") as f:
         data = f.read()
@@ -107,12 +107,13 @@ def decode_from_json(data: str) -> bytes:
     return base64.b64decode(data)
 
 
-def remove_temp_stripe(id: str, path="temp/stripes/"):
-    """REMOVES TEMP STRIPE BY ID"""
-    try:
-        os.remove(path + id)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"No such temp stripe: {id}")
+def remove_temp_stripes(*ids: str, path="temp/stripes/"):
+    """REMOVES ANY AMOUNT OF TEMP STRIPES (FROM THE SAME DIRECTORY) BY ID"""
+    for stripe_id in ids:
+        try:
+            os.remove(path + stripe_id)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"No such temp stripe {stripe_id} in {path}")
 
 
 def update_stripe_location(file: File, stripe_id: str, location: str):
@@ -132,7 +133,7 @@ def find_file_by_name(files: List[File], filename: str) -> File | None:
 
 
 def get_data_from_parity_with_ids(stripe_id: str, parity_id: str, is_first: bool) -> bytes:
-    """" GETS DATA STRIPE ID AND PARITY ID, RETURNS ORIGINAL (DEFRAGMENTED) DATA
+    """ " GETS DATA STRIPE ID AND PARITY ID, RETURNS ORIGINAL (DEFRAGMENTED) DATA
     IS_FIRST MUST BE TRUE IF STRIPE IS FIRST IN ORDER (EVEN BYTES). OTHER WISE FALSE."""
     with open(RESTORE_TEMP_PATH + stripe_id, "rb") as f:
         stripe_data = f.read()
@@ -145,7 +146,7 @@ def get_data_from_parity_with_ids(stripe_id: str, parity_id: str, is_first: bool
 
 
 def get_data_from_stripe_ids(id_first: str, id_second: str, ordered=True):
-    """" GETS TWO DATA STRIPE IDS, RETURNS ORIGINAL (DEFRAGMENTED DATA). IF IDS ARE IN
+    """ " GETS TWO DATA STRIPE IDS, RETURNS ORIGINAL (DEFRAGMENTED DATA). IF IDS ARE IN
     INCORRECT ORDER (SECOND ID IS FIRST STRIPE/ EVEN BYTES), ORDERED SHOULD BE FALSE"""
     with open(RESTORE_TEMP_PATH + id_first, "rb") as f:
         first_data = f.read()
@@ -157,9 +158,9 @@ def get_data_from_stripe_ids(id_first: str, id_second: str, ordered=True):
 
 
 def move_stripe(stripe_id: str, origin_path: str, destination_path: str):
+    """ " MOVES STRIPE BY FILENAME (ID) FROM ONE PATH TO ANOTHER"""
     with open(origin_path + stripe_id, "rb") as f:
         data = f.read()
-    remove_temp_stripe(stripe_id, path=origin_path)
+    remove_temp_stripes(stripe_id, path=origin_path)
     with open(destination_path + stripe_id, "wb") as f:
         f.write(data)
-

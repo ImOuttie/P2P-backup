@@ -2,8 +2,12 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 
 
-def return_false():
+def return_false() -> bool:
     return False
+
+
+def return_zero() -> int:
+    return 0
 
 
 @dataclass(slots=True)
@@ -32,7 +36,8 @@ class TempStripe:
     is_parity: bool
     parent_file: str
     is_first: bool
-    max_seq: int = field(default_factory=list)
+    max_seq: int = field(default_factory=int)
+    cur_seq: int = field(default_factory=return_zero)  # init sequence
     complete: bool = field(default_factory=return_false)
 
 
@@ -40,3 +45,5 @@ class TempStripe:
 class TempFile:
     name: str
     stripes: List[TempStripe] = field(default_factory=list)
+
+

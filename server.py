@@ -51,7 +51,9 @@ class Server:
         self.sock.sendto(data, addr)
 
     def create_connection(self, client1: tuple, client2: tuple):
-        logging.debug(f"Creating connection between {self.clients[client1]}: {client1} and {self.clients[client2]}: {client2}")
+        logging.debug(
+            f"Creating connection between {self.clients[client1]}: {client1} and {self.clients[client2]}: {client2}"
+        )
         connect_msg1 = ConnectToPeer(peer_name=self.clients[client1], peer_address=client1)
         connect_msg2 = ConnectToPeer(peer_name=self.clients[client2], peer_address=client2)
         self.send_to_client(connect_msg1, client2)
@@ -68,13 +70,15 @@ class Server:
         new_file = File(owner=user, hash=request.hash, name=request.file_name, len=request.size)
         self.users[user].owned_files.append(new_file)
         for stripe in request.stripes:
-            new_stripe = FileStripe(hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"], is_first=stripe["is_first"])
+            new_stripe = FileStripe(
+                hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"], is_first=stripe["is_first"]
+            )
             new_file.stripes.append(new_stripe)
         print(f"new file: {new_file}")
         self.tasks.append((None, {"task": "find_location_for_data", "client": user, "file": new_file}))
 
     def find_location_for_data(self, owner: str, filename: str) -> List | None:
-        """ returns list of three available users if found, otherwise returns none"""
+        """returns list of three available users if found, otherwise returns none"""
         availables = []
         for user in self.users.values():
             if user.name == owner or user.storing_gb > self.avg_storage:
@@ -96,7 +100,9 @@ class Server:
         self.send_to_client(resp, owner.current_addr)
 
     def send_file_list(self, request: GetFileList, addr: tuple):
-        self.send_to_client(FileListResp(files=[file.name for file in self.users[self.clients[addr]].owned_files]), addr)
+        self.send_to_client(
+            FileListResp(files=[file.name for file in self.users[self.clients[addr]].owned_files]), addr
+        )
 
     def handle_file_request(self, req: GetFileReq, addr: tuple):
         user = self.users[self.clients[addr]]
@@ -109,7 +115,15 @@ class Server:
         for stripe in file.stripes:
             # TODO: CHECK IF CLIENT IS AVAILABLE
             self.create_connection(self.names[stripe.location], addr)
-            dicts.append({"id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first, "peer": stripe.location, "addr": self.names[stripe.location]})
+            dicts.append(
+                {
+                    "id": stripe.id,
+                    "is_parity": stripe.is_parity,
+                    "is_first": stripe.is_first,
+                    "peer": stripe.location,
+                    "addr": self.names[stripe.location],
+                }
+            )
             count += 1
             if count == 2:
                 break
@@ -129,7 +143,9 @@ class Server:
     def handle_client(self, client_addr, msg: dict):
         match msg["cmd"]:
             case "send_file_req":
-                file_req_msg = SendFileReq(file_name=msg["name"], hash=msg["hash"], size=msg["size"], stripes=msg["stripes"])
+                file_req_msg = SendFileReq(
+                    file_name=msg["name"], hash=msg["hash"], size=msg["size"], stripes=msg["stripes"]
+                )
                 self.handle_file_req(self.clients[client_addr], file_req_msg)
                 return
             case "get_file_list":

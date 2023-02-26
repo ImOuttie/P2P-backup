@@ -1,4 +1,5 @@
 import sys
+BYTEORDER = sys.byteorder
 
 LOCALHOST = True
 
@@ -12,7 +13,9 @@ CLIENT_IP = "0.0.0.0"
 LOGLEVEL = 1
 BACKUP_PATH = r"backups\\"
 RESTORE_PATH = r"restore\\"
+TEMP_STRIPE_PATH = r"temp\stripes\\"
 RESTORE_TEMP_PATH = r"temp\for_restore\\"
 UNFINISHED_STRIPE_PATH = r"temp\not_final\\"
-BYTEORDER = sys.byteorder
+
 SEND_DELAY = 0.01
+MAX_RAW_SIZE = 900
