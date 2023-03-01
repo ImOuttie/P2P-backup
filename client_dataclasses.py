@@ -6,8 +6,8 @@ def return_false() -> bool:
     return False
 
 
-def return_zero() -> int:
-    return 0
+def return_negative_one() -> int:
+    return -1
 
 
 @dataclass(slots=True)
@@ -37,7 +37,7 @@ class TempStripe:
     parent_file: str
     is_first: bool
     max_seq: int = field(default_factory=int)
-    cur_seq: int = field(default_factory=return_zero)  # init sequence
+    cur_seq: int = field(default_factory=return_negative_one)  # init sequence
     complete: bool = field(default_factory=return_false)
 
 

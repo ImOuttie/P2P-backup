@@ -203,8 +203,8 @@ class AppendGetStripe(Message):
         return {
             "cmd": self._cmd,
             "id": self.stripe_id,
-            "seq": self.seq,
             "raw": self.raw,
+            "seq": self.seq,
         }
 
 
