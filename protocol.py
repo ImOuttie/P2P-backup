@@ -1,6 +1,27 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TypedDict
 
-stripe = Dict[str, tuple | str]
+
+class GetFileRespStripe(TypedDict):
+    id: str
+    peer: str
+    addr: tuple
+    is_first: bool
+    is_parity: bool
+
+
+class SendFileRespStripe(TypedDict):
+    id: str
+    peer: str
+    addr: tuple
+
+
+class SendFileReqStripe(TypedDict):
+    id: str
+    hash: str
+    is_parity: bool
+    is_first: bool
+
+
 FILENAME = str
 
 
@@ -55,10 +76,10 @@ class ReceivedConnection(Message):
 
 
 class SendFileReq(Message):
-    def __init__(self, file_name: str, hash: str, size: int, stripes: List[Dict]):
+    def __init__(self, file_name: str, file_hash: str, size: int, stripes: List[SendFileReqStripe]):
         self._cmd = "send_file_req"
         self.file_name = file_name
-        self.hash = hash
+        self.hash = file_hash
         self.size = size
         self.stripes = stripes
 
@@ -73,7 +94,8 @@ class SendFileReq(Message):
 
 
 class SendFileResp(Message):
-    def __init__(self, file_name: str, stripes: List[stripe]):
+
+    def __init__(self, file_name: str, stripes: List[SendFileRespStripe]):
         self._cmd = "send_file_resp"
         self.file_name = file_name
         self.stripes = stripes
@@ -89,14 +111,14 @@ class SendFileResp(Message):
 class NewStripe(Message):
     def __init__(self, id: str, size: int, amount: int):
         self.cmd = "new_stripe"
-        self.id = id
+        self.stripe_id = id
         self.size = size
         self.amount = amount
 
     def to_dict(self) -> dict:
         return {
             "cmd": self.cmd,
-            "id": self.id,
+            "id": self.stripe_id,
             "size": self.size,
             "amount": self.amount,
         }
@@ -153,7 +175,8 @@ class GetFileReq(Message):
 
 
 class GetFileResp(Message):
-    def __init__(self, file_name: str, stripes: List[dict]):
+
+    def __init__(self, file_name: str, stripes: List[GetFileRespStripe]):
         self._cmd = "get_file_resp"
         self.file_name = file_name
         self.stripes = stripes
@@ -179,16 +202,18 @@ class GetStripe(Message):
 
 
 class GetStripeResp(Message):
-    def __init__(self, stripe_id: str, amount: int):
+    def __init__(self, stripe_id: str, amount: int, size: int):
         self._cmd = "get_stripe_resp"
         self.stripe_id = stripe_id
         self.amount = amount
+        self.size = size
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "id": self.stripe_id,
             "amount": self.amount,
+            "size": self.size,
         }
 
 
@@ -219,7 +244,7 @@ def message_reader(msg: dict) -> Message:
             case "received_connection":
                 return ReceivedConnection(msg["name"], accept=msg["accept"])
             case "send_file_req":
-                return SendFileReq(file_name=msg["name"], hash=msg["hash"], size=msg["len"], stripes=msg["stripes"])
+                return SendFileReq(file_name=msg["name"], file_hash=msg["hash"], size=msg["len"], stripes=msg["stripes"])
             case "send_file_resp":
                 return SendFileResp(file_name=msg["name"], stripes=msg["stripes"])
             case "new_stripe":

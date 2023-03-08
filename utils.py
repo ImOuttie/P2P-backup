@@ -145,12 +145,12 @@ def get_data_from_parity_with_ids(stripe_id: str, parity_id: str, is_first: bool
     return defragment_data(other_stripe, stripe_data)
 
 
-def get_data_from_stripe_ids(id_first: str, id_second: str, ordered=True):
+def get_data_from_stripe_ids(id_first: str, id_second: str, dir_path=RESTORE_STRIPE_FINISHED_PATH, ordered=True):
     """ " GETS TWO DATA STRIPE IDS, RETURNS ORIGINAL (DEFRAGMENTED DATA). IF IDS ARE IN
     INCORRECT ORDER (SECOND ID IS FIRST STRIPE/ EVEN BYTES), ORDERED SHOULD BE FALSE"""
-    with open(RESTORE_TEMP_PATH + id_first, "rb") as f:
+    with open(dir_path + id_first, "rb") as f:
         first_data = f.read()
-    with open(RESTORE_TEMP_PATH + id_second, "rb") as f:
+    with open(dir_path + id_second, "rb") as f:
         second_data = f.read()
     if ordered:
         return defragment_data(first_data, second_data)
@@ -159,8 +159,10 @@ def get_data_from_stripe_ids(id_first: str, id_second: str, ordered=True):
 
 def move_stripe(stripe_id: str, origin_path: str, destination_path: str):
     """ " MOVES STRIPE BY FILENAME (ID) FROM ONE PATH TO ANOTHER"""
+    print(f'{origin_path=}')
     with open(origin_path + stripe_id, "rb") as f:
         data = f.read()
-    remove_temp_stripes(stripe_id, path=origin_path)
     with open(destination_path + stripe_id, "wb") as f:
         f.write(data)
+    remove_temp_stripes(stripe_id, path=origin_path)
+

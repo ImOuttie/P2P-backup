@@ -15,8 +15,10 @@ BACKUP_PATH = r"backups\\"
 RESTORE_PATH = r"restore\\"
 TEMP_STRIPE_PATH = r"temp\stripes\\"
 RESTORE_TEMP_PATH = r"temp\for_restore\\"
-UNFINISHED_STRIPE_PATH = r"temp\not_final\\"
+RESTORE_STRIPE_FINISHED_PATH = r"temp\for_restore_finished\\"
+TEMP_PEER_STRIPE_PATH = r"temp\not_final\\"
+
 
 SEND_DELAY = 0.01
-MAX_RAW_SIZE = 900
+MAX_DATA_SIZE = 650
 MAX_PACKET_TIMEOUT = 0.5

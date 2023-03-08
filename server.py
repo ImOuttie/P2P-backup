@@ -144,7 +144,7 @@ class Server:
         match msg["cmd"]:
             case "send_file_req":
                 file_req_msg = SendFileReq(
-                    file_name=msg["name"], hash=msg["hash"], size=msg["size"], stripes=msg["stripes"]
+                    file_name=msg["name"], file_hash=msg["hash"], size=msg["size"], stripes=msg["stripes"]
                 )
                 self.handle_file_req(self.clients[client_addr], file_req_msg)
                 return
