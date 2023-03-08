@@ -159,10 +159,9 @@ def get_data_from_stripe_ids(id_first: str, id_second: str, dir_path=RESTORE_STR
 
 def move_stripe(stripe_id: str, origin_path: str, destination_path: str):
     """ " MOVES STRIPE BY FILENAME (ID) FROM ONE PATH TO ANOTHER"""
-    print(f'{origin_path=}')
+    print(f"{origin_path=}")
     with open(origin_path + stripe_id, "rb") as f:
         data = f.read()
     with open(destination_path + stripe_id, "wb") as f:
         f.write(data)
     remove_temp_stripes(stripe_id, path=origin_path)
-

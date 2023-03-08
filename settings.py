@@ -1,4 +1,5 @@
 import sys
+
 BYTEORDER = sys.byteorder
 
 LOCALHOST = True

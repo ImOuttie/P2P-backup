@@ -32,9 +32,6 @@ class Client:
         self.peer_names: Dict[NAME, Tuple] = {}
         self.files_on_server: Dict[FILE_NAME, File] = {}
         self.sum_backups_size: float = 0
-        self.temp_restore_files: Dict[NAME, TempFile] = {}
-        self.unfinished_peer_stripes: Dict[STRIPE_ID, FINAL_IN_SEQ] = {}
-        self.unfinished_restore_stripes: Dict[STRIPE_ID, TempStripe] = {}
         self.stripe_handlers: Dict[STRIPE_ID, RecvStripeHandler] = {}
         self.recv_file_handlers: Dict[FILE_NAME, RecvFileHandler] = {}
         self.stripe_to_filename: Dict[STRIPE_ID, FILE_NAME] = {}
@@ -67,16 +64,6 @@ class Client:
         self.peers[addr] = name
         self.peer_names[name] = addr
 
-    def save_peer_stripe(self, msg: NewStripe):
-        self.sum_backups_size += msg.size
-        self.create_file(msg.stripe_id, path=TEMP_PEER_STRIPE_PATH)
-        self.unfinished_peer_stripes[msg.stripe_id] = msg.amount - 1  # first seq is 0
-
-    def append_peer_stripe(self, msg: AppendStripe):
-        append_to_file(file_id=msg.id, data=decode_from_json(msg.raw), path=TEMP_PEER_STRIPE_PATH)
-        if msg.seq == self.unfinished_peer_stripes[msg.id]:
-            move_stripe(msg.id, TEMP_PEER_STRIPE_PATH, BACKUP_PATH)
-
     @staticmethod
     def create_file(file_id: str, path=BACKUP_PATH):
         try:
@@ -104,7 +91,9 @@ class Client:
         time.sleep(0.1)
         k = 0
         while k * MAX_DATA_SIZE < len(data):
-            append_stripe_msg = AppendStripe(id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE: (k + 1) * MAX_DATA_SIZE]))
+            append_stripe_msg = AppendStripe(
+                id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])
+            )
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
             time.sleep(SEND_DELAY)
@@ -125,47 +114,13 @@ class Client:
         k = 0
         while k * MAX_DATA_SIZE < len(data):
             self.send_to_peer(
-                AppendGetStripe(stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE: (k + 1) * MAX_DATA_SIZE])),
+                AppendGetStripe(
+                    stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])
+                ),
                 peer_addr,
             )
             time.sleep(SEND_DELAY)
             k += 1
-
-    def handle_get_stripe_resp(self, msg: GetStripeResp):
-        with open(RESTORE_TEMP_PATH + msg.stripe_id, "x"):
-            ...
-        self.unfinished_restore_stripes[msg.stripe_id].max_seq = msg.amount - 1  # first seq is 0
-
-    def handle_previous_seq(self, msg: AppendGetStripe | AppendStripe):
-        if isinstance(msg, AppendStripe):
-            self.append_peer_stripe(msg)
-            return
-        if isinstance(msg, AppendGetStripe):
-            self.handle_append_get_stripe(msg)
-            return
-        raise Exception(f"handle_previous_seq received msg type not containing seq: {msg.to_dict()}")
-
-    def handle_bad_seq(self, msg: AppendGetStripe | AppendStripe):
-        print(f"bad seq: {msg}")
-        self.task_wait_queue.append((None, {"cmd": "handle_previous_seq", "msg": msg}))
-
-    def handle_append_get_stripe(self, msg: AppendGetStripe):
-        data = decode_from_json(msg.raw)
-        with open(RESTORE_TEMP_PATH + msg.stripe_id, "ab") as f:
-            f.write(data)
-        stripe = self.unfinished_restore_stripes[msg.stripe_id]
-        if not msg.seq == stripe.cur_seq + 1:
-            self.handle_bad_seq(msg)
-            return
-        stripe.cur_seq += 1
-        if msg.seq == stripe.max_seq:
-            stripe.complete = True
-            self.unfinished_restore_stripes.pop(msg.stripe_id)
-            parent_file = self.temp_restore_files[stripe.parent_file]
-            for stripe in parent_file.stripes:
-                if not stripe.complete:
-                    return
-            self.combine_stripes(parent_file)
 
     def handle_file_resp(self, response: SendFileResp):
         file_name = response.file_name
@@ -183,26 +138,6 @@ class Client:
     def request_file(self, filename: str):
         self.send_to_server(GetFileReq(file_name=filename))
 
-    def get_stripe_from_peer(self, stripe: TempStripe):
-        self.send_to_peer(GetStripe(stripe_id=stripe.id), tuple(stripe.peer_addr))
-
-    def handle_get_file_resp(self, resp: GetFileResp):
-
-        file = TempFile(name=resp.file_name)
-        self.temp_restore_files[resp.file_name] = file
-        for stripe in resp.stripes:
-            temp_stripe = TempStripe(
-                id=stripe["id"],
-                is_parity=stripe["is_parity"],
-                peer_name=stripe["peer"],
-                peer_addr=stripe["addr"],
-                is_first=stripe["is_first"],
-                parent_file=resp.file_name,
-            )
-            file.stripes.append(temp_stripe)
-            self.unfinished_restore_stripes[temp_stripe.id] = temp_stripe
-            self.get_stripe_from_peer(temp_stripe)
-
     def create_recv_file_handler(self, msg: GetFileResp):
         file_name = msg.file_name
         self.recv_file_handlers[file_name] = RecvFileHandler(GetFileResp(file_name=file_name, stripes=msg.stripes))
@@ -210,40 +145,10 @@ class Client:
             self.stripe_to_filename[msg_stripe["id"]] = file_name
             self.send_to_peer(GetStripe(stripe_id=msg_stripe["id"]), tuple(msg_stripe["addr"]))
 
-    def combine_stripes(self, file: TempFile):
-        # SHOULD ONLY BE CALLED IF ALL STRIPES IN TEMP FILE HAVE BEEN SAVED COMPLETELY (NOT STILL RECEIVING APPENDS)
-        if file.name not in self.temp_restore_files:
-            # CALLED TWICE (RACE CONDITION)
-            return
-        parity_id = None
-        stripe_id = None
-        last_stripe_is_first = False
-        for stripe in file.stripes:
-            if not stripe.complete:
-                raise Exception("combine_stripes() was called with temp file containing incomplete temp stripes")
-            if stripe.is_parity:
-                parity_id = stripe.id
-                continue
-            last_stripe_is_first = stripe.is_first
-            stripe_id = stripe.id
-        if parity_id and stripe_id:
-            original_data = get_data_from_parity_with_ids(stripe_id, parity_id, last_stripe_is_first)
-            save_file_in_restore(file.name, original_data)
-            self.temp_restore_files.pop(file.name)
-            return
-        original_data = get_data_from_stripe_ids(
-            *[file_stripe.id for file_stripe in file.stripes], ordered=not last_stripe_is_first
-        )
-        remove_temp_stripes(*[file_stripe.id for file_stripe in file.stripes], path=RESTORE_TEMP_PATH)
-        save_file_in_restore(file.name, original_data)
-        self.temp_restore_files.pop(file.name)
-
     def handle_self(self, msg: dict):
         match msg["cmd"]:
             case "handle_get_stripe":
                 self.handle_get_stripe(msg["msg"], msg["addr"])
-            case "handle_previous_seq":
-                self.handle_previous_seq(msg["msg"])
 
     def handle_server(self, msg: dict):
         match msg["cmd"]:
@@ -256,7 +161,6 @@ class Client:
             case "get_file_resp":
                 self.create_recv_file_handler(GetFileResp(file_name=msg["file"], stripes=msg["stripes"]))
                 # todo you were here
-                # self.handle_get_file_resp(GetFileResp(file_name=msg["file"], stripes=msg["stripes"]))
 
     def handle_peer(self, task: Tuple[tuple, dict]):
         addr = task[0]
@@ -268,24 +172,24 @@ class Client:
                     return
                 self.remove_peer(addr)
             case "new_stripe":
-                # self.save_peer_stripe(NewStripe(id=msg["id"], size=msg["size"], amount=msg["amount"]))
                 self.stripe_handlers[msg["id"]] = RecvStripeHandler(
                     NewStripe(id=msg["id"], size=msg["size"], amount=msg["amount"]),
                     temp_dir_path=TEMP_PEER_STRIPE_PATH,
                     final_dir_path=BACKUP_PATH,
                 )
             case "append_stripe":
-                # self.append_peer_stripe(AppendStripe(id=msg["id"], raw=msg["raw"], seq=msg["seq"]))
                 self.stripe_handlers[msg["id"]].new_append(AppendStripe(id=msg["id"], raw=msg["raw"], seq=msg["seq"]))
             case "get_stripe":
-                print('got get_stripe')
+                print("got get_stripe")
                 self.handle_get_stripe(GetStripe(stripe_id=msg["id"]), addr)
             case "get_stripe_resp":
-                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].new_recv_handler(GetStripeResp(stripe_id=msg["id"], amount=msg["amount"], size=msg["size"]))
-                # self.handle_get_stripe_resp(GetStripeResp(stripe_id=msg["id"], amount=msg["amount"], size=msg["size"]))
+                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].new_recv_handler(
+                    GetStripeResp(stripe_id=msg["id"], amount=msg["amount"], size=msg["size"])
+                )
             case "append_get_stripe":
-                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].append_stripe(AppendGetStripe(stripe_id=msg["id"], seq=msg["seq"], raw=msg["raw"]))
-                # self.handle_append_get_stripe(AppendGetStripe(stripe_id=msg["id"], seq=msg["seq"], raw=msg["raw"]))
+                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].append_stripe(
+                    AppendGetStripe(stripe_id=msg["id"], seq=msg["seq"], raw=msg["raw"])
+                )
 
     def handle_tasks(self):
         while True:

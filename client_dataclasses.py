@@ -45,5 +45,3 @@ class TempStripe:
 class TempFile:
     name: str
     stripes: List[TempStripe] = field(default_factory=list)
-
-

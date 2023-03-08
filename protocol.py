@@ -94,7 +94,6 @@ class SendFileReq(Message):
 
 
 class SendFileResp(Message):
-
     def __init__(self, file_name: str, stripes: List[SendFileRespStripe]):
         self._cmd = "send_file_resp"
         self.file_name = file_name
@@ -175,7 +174,6 @@ class GetFileReq(Message):
 
 
 class GetFileResp(Message):
-
     def __init__(self, file_name: str, stripes: List[GetFileRespStripe]):
         self._cmd = "get_file_resp"
         self.file_name = file_name
@@ -244,7 +242,9 @@ def message_reader(msg: dict) -> Message:
             case "received_connection":
                 return ReceivedConnection(msg["name"], accept=msg["accept"])
             case "send_file_req":
-                return SendFileReq(file_name=msg["name"], file_hash=msg["hash"], size=msg["len"], stripes=msg["stripes"])
+                return SendFileReq(
+                    file_name=msg["name"], file_hash=msg["hash"], size=msg["len"], stripes=msg["stripes"]
+                )
             case "send_file_resp":
                 return SendFileResp(file_name=msg["name"], stripes=msg["stripes"])
             case "new_stripe":
