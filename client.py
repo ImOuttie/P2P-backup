@@ -35,7 +35,6 @@ class Client:
         self.stripe_handlers: Dict[STRIPE_ID, RecvStripeHandler] = {}
         self.recv_file_handlers: Dict[FILE_NAME, RecvFileHandler] = {}
         self.stripe_to_filename: Dict[STRIPE_ID, FILE_NAME] = {}
-        # TODO: forward file handler to diff port maybe?
 
     def send_to_peer(self, msg: Message, addr: tuple):
         data = json.dumps(msg.to_dict()).encode()
@@ -63,15 +62,6 @@ class Client:
             return
         self.peers[addr] = name
         self.peer_names[name] = addr
-
-    @staticmethod
-    def create_file(file_id: str, path=BACKUP_PATH):
-        try:
-            with open(path + file_id, "x"):
-                ...
-        except FileExistsError:
-            logging.debug(f"file already exists: {file_id}")
-        return
 
     def req_send_file(self, absolute_path: str):
         file = abstract_file(absolute_path)

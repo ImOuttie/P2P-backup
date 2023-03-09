@@ -12,28 +12,27 @@ STRIPE_ID = str
 
 
 def init_file_by_size(path: str, size: int):
-    print(f"called init file by size with {path=} {size=}")
-    """ creates sparse (empty) file of specified size. size is in bytes"""
+    """creates sparse (empty) file of specified size. size is in bytes"""
     with open(path, "ab") as f:
         f.seek(size)
         f.write(b"")
 
 
 def write_to_position(path: str, data: bytes, pos: int):
-    """ " writes data to specified position in file. pos is in bytes"""
+    """writes data to specified position in file. pos is in bytes"""
     with open(path, "ab") as f:
         f.seek(pos)
         f.write(data)
 
 
 def calculate_timeout(msg_count: int) -> float:
-    """ calculates and returns expected max timeout for an entire sequence of messages"""
+    """calculates and returns expected max timeout for an entire sequence of messages"""
     return msg_count * settings.MAX_PACKET_TIMEOUT + 10
 
 
 def calculate_pos(seq, data_size: int) -> int:
-    """ calculates position in file to (seek and) write to using sequence number"""
-    return seq * settings.MAX_DATA_SIZE  # + data_size
+    """calculates position in file to (seek and) write to using sequence number"""
+    return seq * settings.MAX_DATA_SIZE
 
 
 class RecvStripeHandler:
@@ -57,7 +56,6 @@ class RecvStripeHandler:
         if data_size > settings.MAX_DATA_SIZE:
             raise ValueError(f"Message contained raw data size too large: {data_size}")
         if seq != self.amount - 1 and data_size != settings.MAX_DATA_SIZE:
-            print(seq, self.amount - 1)
             raise ValueError(f"Message contained improper raw data size: {data_size}")
         return True
 
@@ -103,7 +101,6 @@ class RecvFileHandler:
     def is_handlers_finished(self) -> bool:
         """returns true if all RecvStripeHandlers have finished"""
         for handler in self.stripe_handlers.values():
-            print(handler.id, handler.finished)
             if not handler.finished:
                 return False
         for temp_stripe in self.temp_stripes:
@@ -156,9 +153,7 @@ class RecvFileHandler:
         temp_stripes = self.temp_file.stripes
         for temp_stripe in self.temp_file.stripes:
             if not temp_stripe.complete:
-                raise Exception(
-                    f"combine_stripes() was called with temp file containing incomplete temp stripes {temp_stripes=}"
-                )
+                raise Exception(f"combine_stripes() was called with temp file containing incomplete temp stripes {temp_stripes=}")
             if temp_stripe.is_parity:
                 self.handle_parity(temp_stripe)
                 return
