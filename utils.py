@@ -2,11 +2,14 @@ import binascii
 import os
 from itertools import cycle, islice
 
+from Crypto.Cipher import ChaCha20
+
 from settings import *
 from typing import Tuple, List
 import uuid
 from hashlib import md5
 from client_dataclasses import File, FileStripe
+from server_dataclasses import UserFile
 import base64
 
 
@@ -33,12 +36,12 @@ def get_parity(data1: bytes, *other_data: bytes) -> bytes:
 
 
 def fragment_data(data: bytes) -> Tuple[bytes, bytes]:
-    """ " returns tuple of all the even bytes and all the uneven bytes"""
+    """ Returns tuple of (even_bytes, uneven_bytes). """
     return data[::2], data[1::2]
 
 
 def defragment_data(data1: bytes, data2: bytes) -> bytes:
-    """defragments data stripes and returns the original data"""
+    """ Defragments data stripes and returns the original data. """
     defrag = []
     for byte1, byte2 in zip(data1, data2):
         defrag.append(byte1)
@@ -51,8 +54,10 @@ def defragment_data(data1: bytes, data2: bytes) -> bytes:
 
 
 def get_stripe_with_parity(stripe: bytes, parity: bytes) -> bytes:
-    """Uses parity data and a data stripe to return the other missing data stripe.
-    This is essentially virtual RAID 5"""
+    """
+    Uses parity data and a data stripe to return the other missing data stripe.
+    This is essentially virtual RAID 5.
+    """
     return (int.from_bytes(parity, BYTEORDER) ^ int.from_bytes(stripe, BYTEORDER)).to_bytes(len(parity), BYTEORDER)
 
 
@@ -63,19 +68,22 @@ def save_temp_stripe(id: str, data: bytes, temppath="temp/stripes/"):
 
 
 def save_file_in_restore(name: str, data, path=RESTORE_PATH):
-    """Writes data to file and saves it in restore path, unless specified otherwise."""
+    """ Writes data to file and saves it in restore path, unless specified otherwise. """
     with open(path + name, "wb") as f:
         f.write(data)
 
 
-def abstract_file(absolute_path: str) -> File:
-    """Reads file and creates matching dataclass representation of it.
-    Additionally, it saves all stripes of file (including parity) in temp folder."""
+def abstract_file(absolute_path: str, key: bytes) -> File:
+    """
+    Reads file and creates matching dataclass representation of it.
+    Additionally, it encrypts and saves all stripes of file (including parity) in temp folder.
+    """
     with open(absolute_path, "rb") as f:
         data = f.read()
+    data, nonce = encrypt_file_data(data, key=key)
     name = os.path.basename(absolute_path)
     file_hash = get_hash(data)
-    file = File(name=name, hash=file_hash, len=len(data), absolute_path=absolute_path)
+    file = File(name=name, hash=file_hash, len=len(data), absolute_path=absolute_path, nonce=nonce)
     data_stripes = fragment_data(data)
     first = True
     for data_stripe in data_stripes:
@@ -98,17 +106,17 @@ def append_to_file(file_id: str, data: bin, path=BACKUP_PATH):
 
 
 def encode_for_json(data: bytes) -> str:
-    """"Encodes data to base64 string."""
+    """" Encodes data to base64 string. """
     return str(base64.b64encode(data), encoding="ASCII")
 
 
 def decode_from_json(data: str) -> bytes:
-    """Decodes base64 string to bytes."""
+    """ Decodes base64 string to bytes. """
     return base64.b64decode(data)
 
 
 def remove_temp_stripes(*ids: str, path="temp/stripes/"):
-    """Removes any amount of temp stripes, as long as they're in the same directory, by id (name)."""
+    """ Removes any amount of temp stripes, as long as they're in the same directory, by id (name). """
     for stripe_id in ids:
         try:
             os.remove(path + stripe_id)
@@ -117,15 +125,15 @@ def remove_temp_stripes(*ids: str, path="temp/stripes/"):
 
 
 def update_stripe_location(file: File, stripe_id: str, location: str):
-    """Updates stripe location (peer name) by file and stripe id."""
+    """ Updates stripe location (peer name) by file and stripe id. """
     for stripe in file.stripes:
         if stripe.id == stripe_id:
             stripe.location = location
             return
 
 
-def find_file_by_name(files: List[File], filename: str) -> File | None:
-    """"Finds and returns file (dataclass representation) from list of files by filename. If not found returns None."""
+def find_file_by_name(files: List[File] | List[UserFile], filename: str) -> File | None:
+    """ Finds and returns file (dataclass representation) from list of files by filename. If not found returns None."""
     for file in files:
         if file.name == filename:
             return file
@@ -133,8 +141,10 @@ def find_file_by_name(files: List[File], filename: str) -> File | None:
 
 
 def get_data_from_parity_with_ids(stripe_id: str, parity_id: str, is_first: bool) -> bytes:
-    """Returns original (defragmented) data. If the non-parity stripe is first (contains the even bytes),
-    is_first must be True. If the stripe contains the uneven bytes, is_first should be False."""
+    """
+    Returns original (defragmented) data. If the non-parity stripe is first (contains the even bytes),
+    is_first must be True. If the stripe contains the uneven bytes, is_first should be False.
+    """
     with open(RESTORE_TEMP_PATH + stripe_id, "rb") as f:
         stripe_data = f.read()
     with open(RESTORE_TEMP_PATH + parity_id, "rb") as f:
@@ -146,8 +156,10 @@ def get_data_from_parity_with_ids(stripe_id: str, parity_id: str, is_first: bool
 
 
 def get_data_from_stripe_ids(id_first: str, id_second: str, dir_path=RESTORE_STRIPE_FINISHED_PATH, ordered=True):
-    """ Returns original (defragmented) using two stripe ids. If ids are in the incorrect (positional) order,
-    meaning the first stripe contains the uneven bytes, ordered should be set to False."""
+    """
+    Returns original (defragmented) using two stripe ids. If ids are in the incorrect (positional) order,
+    meaning the first stripe contains the uneven bytes, ordered should be set to False.
+    """
     with open(dir_path + id_first, "rb") as f:
         first_data = f.read()
     with open(dir_path + id_second, "rb") as f:
@@ -158,9 +170,28 @@ def get_data_from_stripe_ids(id_first: str, id_second: str, dir_path=RESTORE_STR
 
 
 def move_stripe(stripe_id: str, origin_dir: str, destination_dir: str):
-    """Moves stripe by id and from one directory to another."""
+    """ Moves stripe by id and from one directory to another. """
     with open(origin_dir + stripe_id, "rb") as f:
         data = f.read()
     with open(destination_dir + stripe_id, "wb") as f:
         f.write(data)
     remove_temp_stripes(stripe_id, path=origin_dir)
+
+
+def get_chacha_key() -> bytes:
+    """ Returns suitable key for the ChaCha20 algorithm; 32 random bytes. """
+    return os.urandom(32)
+
+
+def encrypt_file_data(plaintext: bytes, key: bytes) -> Tuple[bytes, bytes]:
+    """ Encrypts plaintext using the ChaCha20 algorithm. Returns nonce which is required for decrypting the file. """
+    cipher = ChaCha20.new(key=key)
+    return cipher.encrypt(plaintext), cipher.nonce
+
+
+def decrypt_file_data(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
+    """ Decrypts ChaCha20 ciphertext. The nonce which was used for encryption is required. """
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    return cipher.decrypt(ciphertext)
+
+

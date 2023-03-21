@@ -1,3 +1,4 @@
+import base64
 import logging
 import json
 import os.path
@@ -21,7 +22,7 @@ TASK: dict
 
 
 class Client:
-    def __init__(self, name: str, port: int):
+    def __init__(self, name: str, port: int, chacha_key=os.urandom(32)):
         self.name = name
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((CLIENT_IP, port))
@@ -35,6 +36,8 @@ class Client:
         self.stripe_handlers: Dict[STRIPE_ID, RecvStripeHandler] = {}
         self.recv_file_handlers: Dict[FILE_NAME, RecvFileHandler] = {}
         self.stripe_to_filename: Dict[STRIPE_ID, FILE_NAME] = {}
+        self.chacha_key = chacha_key
+        self.nonces: Dict[FILE_NAME, bytes] = {}
 
     def send_to_peer(self, msg: Message, addr: tuple):
         data = json.dumps(msg.to_dict()).encode()
@@ -64,13 +67,13 @@ class Client:
         self.peer_names[name] = addr
 
     def req_send_file(self, absolute_path: str):
-        file = abstract_file(absolute_path)
+        file = abstract_file(absolute_path, key=self.chacha_key)
         dicts = [
             {"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first}
             for stripe in file.stripes
         ]
         self.files_on_server[file.name] = file
-        request = SendFileReq(file_name=file.name, file_hash=file.hash, size=file.len, stripes=dicts)
+        request = SendFileReq(file_name=file.name, file_hash=file.hash, size=file.len, nonce=encode_for_json(file.nonce), stripes=dicts)
         self.send_to_server(request)
 
     def send_stripe(self, stripe_id: str, peer_addr: tuple):
@@ -130,7 +133,7 @@ class Client:
 
     def create_recv_file_handler(self, msg: GetFileResp):
         file_name = msg.file_name
-        self.recv_file_handlers[file_name] = RecvFileHandler(GetFileResp(file_name=file_name, stripes=msg.stripes))
+        self.recv_file_handlers[file_name] = RecvFileHandler(msg, key=self.chacha_key)
         for msg_stripe in msg.stripes:
             self.stripe_to_filename[msg_stripe["id"]] = file_name
             self.send_to_peer(GetStripe(stripe_id=msg_stripe["id"]), tuple(msg_stripe["addr"]))
@@ -149,7 +152,7 @@ class Client:
             case "file_list_resp":
                 self.handle_file_list_resp(FileListResp(files=msg["files"]))
             case "get_file_resp":
-                self.create_recv_file_handler(GetFileResp(file_name=msg["file"], stripes=msg["stripes"]))
+                self.create_recv_file_handler(GetFileResp(file_name=msg["file"], nonce=msg["nonce"], stripes=msg["stripes"]))
                 # todo you were here
 
     def handle_peer(self, task: Tuple[tuple, dict]):
@@ -236,8 +239,9 @@ def main():
     task_thread = Thread(target=client.handle_tasks)
     receive_thread.start()
     task_thread.start()
-    connect_msg = Connect(name=client.name, register=True)
-    client.send_to_server(connect_msg)
+    register_msg = Register(name=client.name, key=encode_for_json(get_chacha_key()))
+
+    client.send_to_server(register_msg)
     if name == "alice":
         time.sleep(1.5)
         client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")

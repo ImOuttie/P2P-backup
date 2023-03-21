@@ -1,6 +1,6 @@
 from utils import *
 
-from server_dataclasses import *
+from server_dataclasses import UserFile, FileStripe, User
 from protocol import *
 from settings import *
 import json
@@ -14,10 +14,11 @@ from typing import List, Tuple, Dict, Deque
 from dataclasses import dataclass, field
 
 
-Files = List[File]
+Files = List[UserFile]
 NAME = str
 FILENAME: str
 ADDRESS = Tuple
+KEY: str
 
 
 class Server:
@@ -26,17 +27,27 @@ class Server:
         self.sock.bind((SERVER_IP, SERVER_PORT))
         self.clients: Dict[ADDRESS, NAME] = {}
         self.names: Dict[NAME, ADDRESS] = {}
-        self.file_names: Dict[NAME, Dict[FILENAME, File]]
+        self.file_names: Dict[NAME, Dict[FILENAME, UserFile]] = {}
         self.tasks: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.users: Dict[NAME, User] = {}
         self.task_wait_queue: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.avg_storage = 4
+        self.client_keys: Dict[NAME, KEY] = {}
 
-    def add_client(self, msg: Connect, address: tuple):
+    def load_client(self, msg: Connect, address: tuple):
+        # todo: load clint
         name = msg.name
         self.clients[address] = name
         self.names[name] = address
         self.users[name] = User(name=name, current_addr=address)
+
+    def register_client(self, msg: Register, addr: tuple):
+        name = msg.name
+        self.clients[addr] = name
+        self.names[name] = addr
+        self.users[name] = User(name=name, current_addr=addr)
+        self.file_names[msg.name] = {}
+        self.client_keys[msg.name] = msg.key
 
     def remove_client(self, address):
         try:
@@ -67,7 +78,8 @@ class Server:
         return
 
     def handle_file_req(self, user: str, request: SendFileReq):
-        new_file = File(owner=user, hash=request.hash, name=request.file_name, len=request.size)
+        new_file = UserFile(owner=user, hash=request.hash, name=request.file_name, len=request.size, nonce=request.nonce)
+        self.file_names[user][request.file_name] = new_file
         self.users[user].owned_files.append(new_file)
         for stripe in request.stripes:
             new_stripe = FileStripe(
@@ -78,7 +90,7 @@ class Server:
         self.tasks.append((None, {"task": "find_location_for_data", "client": user, "file": new_file}))
 
     def find_location_for_data(self, owner: str, filename: str) -> List | None:
-        """returns list of three available users if found, otherwise returns none"""
+        """ Returns list of three available users if found. Otherwise returns None. """
         availables = []
         for user in self.users.values():
             if user.name == owner or user.storing_gb > self.avg_storage:
@@ -89,7 +101,7 @@ class Server:
         # TODO: FIX ASSUMPTION THAT ALL CLIENTS ARE AVAILABLE, CHECK FOR SIZE
         return None
 
-    def send_addrs_to_client(self, owner: User, users: List[User], file: File):
+    def send_addrs_to_client(self, owner: User, users: List[User], file: UserFile):
         for user in users:
             self.create_connection(owner.current_addr, user.current_addr)
         file_stripes = []
@@ -127,7 +139,7 @@ class Server:
             count += 1
             if count == 2:
                 break
-        self.send_to_client(GetFileResp(file_name=req.file_name, stripes=dicts), addr)
+        self.send_to_client(GetFileResp(file_name=req.file_name, stripes=dicts, nonce=file.nonce), addr)
 
     def handle_self(self, task: dict):
         match task["task"]:
@@ -144,7 +156,7 @@ class Server:
         match msg["cmd"]:
             case "send_file_req":
                 file_req_msg = SendFileReq(
-                    file_name=msg["name"], file_hash=msg["hash"], size=msg["size"], stripes=msg["stripes"]
+                    file_name=msg["name"], file_hash=msg["hash"], size=msg["size"], nonce=msg["nonce"], stripes=msg["stripes"],
                 )
                 self.handle_file_req(self.clients[client_addr], file_req_msg)
                 return
@@ -185,9 +197,11 @@ class Server:
                 else:
                     msg = json.loads(data.decode())
                     logging.debug(f"Received message: {msg} from {address}")
-                    if msg["cmd"] == "connect" and msg["register"]:
-                        self.add_client(Connect(name=msg["name"], register=msg["register"]), address)
+                    if msg["cmd"] == "connect":
+                        self.load_client(Connect(name=msg["name"]), address)
                         # TODO: HANDLE NON REGISTER CONNECTION
+                    elif msg["cmd"] == "register":
+                        self.register_client(Register(name=msg["name"], key=msg["key"]), address)
             except json.JSONDecodeError:
                 print(f"Invalid msg: {data.decode()}")
 

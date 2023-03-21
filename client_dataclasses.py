@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from typing import List, Dict
 
@@ -25,6 +26,7 @@ class File:
     hash: str
     len: int
     absolute_path: str
+    nonce: bytes
     stripes: List[FileStripe] = field(default_factory=list)
 
 

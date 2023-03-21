@@ -33,17 +33,29 @@ class Message:
         raise NotImplementedError
 
 
-class Connect(Message):
-    def __init__(self, name: str, register: bool = False):
-        self._cmd = "connect"
+class Register(Message):
+    def __init__(self, name: str, key: str):
+        self._cmd = "register"
         self.name = name
-        self.register = register
+        self.key = key
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "name": self.name,
-            "register": self.register,
+            "key": self.key,
+        }
+
+
+class Connect(Message):
+    def __init__(self, name: str):
+        self._cmd = "connect"
+        self.name = name
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "name": self.name,
         }
 
 
@@ -76,12 +88,13 @@ class ReceivedConnection(Message):
 
 
 class SendFileReq(Message):
-    def __init__(self, file_name: str, file_hash: str, size: int, stripes: List[SendFileReqStripe]):
+    def __init__(self, file_name: str, file_hash: str, size: int, nonce: str, stripes: List[SendFileReqStripe]):
         self._cmd = "send_file_req"
         self.file_name = file_name
         self.hash = file_hash
         self.size = size
         self.stripes = stripes
+        self.nonce = nonce
 
     def to_dict(self) -> dict:
         return {
@@ -89,6 +102,7 @@ class SendFileReq(Message):
             "name": self.file_name,
             "hash": self.hash,
             "size": self.size,
+            "nonce": self.nonce,
             "stripes": self.stripes,
         }
 
@@ -174,15 +188,17 @@ class GetFileReq(Message):
 
 
 class GetFileResp(Message):
-    def __init__(self, file_name: str, stripes: List[GetFileRespStripe]):
+    def __init__(self, file_name: str, nonce: str, stripes: List[GetFileRespStripe]):
         self._cmd = "get_file_resp"
         self.file_name = file_name
+        self.nonce = nonce
         self.stripes = stripes
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "file": self.file_name,
+            "nonce": self.nonce,
             "stripes": self.stripes,
         }
 
