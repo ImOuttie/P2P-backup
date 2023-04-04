@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import List, Dict, Any, TypedDict
 
 
@@ -26,11 +27,37 @@ FILENAME = str
 
 
 class Message:
-    """baseclass for protocol message, every message class
-    must contain to_dict method so it can be passed to json"""
+    """
+    Baseclass for protocol message, every message class
+    Must contain to_dict method so it can be passed to json.
+    """
 
     def to_dict(self) -> dict:
         raise NotImplementedError
+
+
+class Authenticate(Message):
+    def __init__(self, public_key: str):
+        self._cmd = "authenticate"
+        self.public_key = public_key
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "key": self.public_key,
+        }
+
+
+class AuthenticateResp(Message):
+    def __init__(self, public_key: str):
+        self._cmd = "authenticate_resp"
+        self.public_key = public_key
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "key": self.public_key,
+        }
 
 
 class Register(Message):
@@ -47,6 +74,18 @@ class Register(Message):
         }
 
 
+class Login(Message):
+    def __init__(self, name: str):
+        self._cmd = "Login"
+        self.name = name
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "name": self.name
+        }
+
+
 class Connect(Message):
     def __init__(self, name: str):
         self._cmd = "connect"
@@ -60,16 +99,18 @@ class Connect(Message):
 
 
 class ConnectToPeer(Message):
-    def __init__(self, peer_name: str, peer_address: tuple):
+    def __init__(self, peer_name: str, peer_address: tuple, key: str = 'removelater'):
         self._cmd = "connect_to_peer"
         self.peer_name = peer_name
         self.peer_address = peer_address
+        self.key = key
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "name": self.peer_name,
             "peer_address": self.peer_address,
+            "key": self.key,
         }
 
 
@@ -246,35 +287,3 @@ class AppendGetStripe(Message):
             "seq": self.seq,
         }
 
-
-def message_reader(msg: dict) -> Message:
-    """ " READS PROTOCOL MESSAGE AND RETURNS MATCHING MESSAGE CLASS INSTANCE"""
-    try:
-        match msg["cmd"]:
-            case "connect":
-                return Connect(name=msg["name"], register=msg["register"] if "register" in msg.keys() else False)
-            case "connect_to_peer":
-                return ConnectToPeer(peer_name=msg["name"], peer_address=msg["peer_address"])
-            case "received_connection":
-                return ReceivedConnection(msg["name"], accept=msg["accept"])
-            case "send_file_req":
-                return SendFileReq(
-                    file_name=msg["name"], file_hash=msg["hash"], size=msg["len"], stripes=msg["stripes"]
-                )
-            case "send_file_resp":
-                return SendFileResp(file_name=msg["name"], stripes=msg["stripes"])
-            case "new_stripe":
-                return NewStripe(id=msg["id"], size=msg["size"], amount=msg["amount"])
-            case "append_stripe":
-                return AppendStripe(id=msg["id"], raw=msg["raw"], seq=msg["seq"])
-            case "get_file_list":
-                return GetFileList()
-            case "file_list_resp":
-                return FileListResp(files=msg["files"])
-            case "get_file_req":
-                return GetFileReq(file_name=msg["file"])
-            case "get_file_resp":
-                return GetFileResp(file_name=msg["file"], stripes=msg["stripes"])
-        raise Exception(f"message contains command that doesn't exist: {msg}")
-    except KeyError:
-        raise KeyError(f"message contains invalid key: {msg}")

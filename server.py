@@ -1,3 +1,4 @@
+import encryption_utils
 from utils import *
 
 from server_dataclasses import UserFile, FileStripe, User
@@ -12,12 +13,13 @@ from threading import Thread
 import time
 from typing import List, Tuple, Dict, Deque
 from dataclasses import dataclass, field
+from cryptography.fernet import Fernet
 
 
 Files = List[UserFile]
 NAME = str
 FILENAME: str
-ADDRESS = Tuple
+ADDRESS = Tuple[str, int]
 KEY: str
 
 
@@ -33,6 +35,9 @@ class Server:
         self.task_wait_queue: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.avg_storage = 4
         self.client_keys: Dict[NAME, KEY] = {}
+        self.fernets: Dict[ADDRESS, Fernet] = {}
+        self.private_key, self.public_key = encryption_utils.generate_ecdh_keys(path_private="keys/server_keys/private.PEM",
+                                                                                path_public="keys/server_keys/public.PEM")
 
     def load_client(self, msg: Connect, address: tuple):
         # todo: load clint
@@ -185,6 +190,17 @@ class Server:
                 self.handle_client(addr, msg)
                 continue
             self.handle_self(msg)
+
+    def handle_auth(self, msg: Authenticate, addr: ADDRESS):
+        client_key = encryption_utils.deserialize_public_key(msg.public_key.encode())
+        fernet = encryption_utils.get_fernet(private_key=self.private_key, public_key=client_key)
+        self.fernets[addr] = fernet
+
+
+    def handle_new_connection(self, msg: dict):
+        match msg["cmd"]:
+            case "authenticate":
+                pass
 
     def receive_data(self):
         while True:

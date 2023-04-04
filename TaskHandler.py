@@ -100,6 +100,7 @@ class RecvFileHandler:
         self.stripe_handlers: Dict[STRIPE_ID, RecvStripeHandler] = {}
         self.finished = False
         self._daemon_interval = 10
+        # TODO: CALCULATE TIMEOUT
         self.timeout = 1000
         self.daemon_thread = threading.Thread(target=self.run_daemon)
         self.daemon_thread.start()

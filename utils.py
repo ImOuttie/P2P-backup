@@ -132,7 +132,7 @@ def update_stripe_location(file: File, stripe_id: str, location: str):
             return
 
 
-def find_file_by_name(files: List[File] | List[UserFile], filename: str) -> File | None:
+def find_file_by_name(files: List[File] | List[UserFile], filename: str) -> File | UserFile | None:
     """ Finds and returns file (dataclass representation) from list of files by filename. If not found returns None."""
     for file in files:
         if file.name == filename:
