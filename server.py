@@ -7,12 +7,10 @@ from settings import *
 import json
 import logging
 import socket
-import threading
 from collections import deque
 from threading import Thread
 import time
 from typing import List, Tuple, Dict, Deque
-from dataclasses import dataclass, field
 from cryptography.fernet import Fernet
 
 
@@ -36,8 +34,9 @@ class Server:
         self.avg_storage = 4
         self.client_keys: Dict[NAME, KEY] = {}
         self.fernets: Dict[ADDRESS, Fernet] = {}
-        self.private_key, self.public_key = encryption_utils.generate_ecdh_keys(path_private="keys/server_keys/private.PEM",
-                                                                                path_public="keys/server_keys/public.PEM")
+        self.private_key, self.public_key = encryption_utils.generate_ecdh_keys(
+            path_private="keys/server_keys/private.PEM", path_public="keys/server_keys/public.PEM"
+        )
         self.authentications = ...
 
     def load_client(self, msg: Login, address: ADDRESS):
@@ -77,9 +76,7 @@ class Server:
         return json.loads(encryption_utils.decrypt_with_fernet(f, ciphertext=data).decode())
 
     def create_connection(self, client1: tuple, client2: tuple):
-        logging.debug(
-            f"Creating connection between {self.clients[client1]}: {client1} and {self.clients[client2]}: {client2}"
-        )
+        logging.debug(f"Creating connection between {self.clients[client1]}: {client1} and {self.clients[client2]}: {client2}")
         key = encryption_utils.generate_b64_fernet_key()
         connect_msg1 = ConnectToPeer(peer_name=self.clients[client1], peer_address=client1, fernet_key=key)
         connect_msg2 = ConnectToPeer(peer_name=self.clients[client2], peer_address=client2, fernet_key=key)
@@ -99,14 +96,16 @@ class Server:
         self.users[user].owned_files.append(new_file)
         for stripe in request.stripes:
             new_stripe = FileStripe(
-                hash=stripe["hash"], is_parity=stripe["is_parity"], id=stripe["id"], is_first=stripe["is_first"],
+                hash=stripe["hash"],
+                is_parity=stripe["is_parity"],
+                id=stripe["id"],
+                is_first=stripe["is_first"],
             )
             new_file.stripes.append(new_stripe)
-        print(f"new file: {new_file}")
         self.tasks.append((None, {"task": "find_location_for_data", "client": user, "file": new_file}))
 
-    def find_location_for_data(self, owner: str, filename: str) -> List | None:
-        """ Returns list of three available users if found. Otherwise returns None. """
+    def find_location_for_data(self, owner: str) -> List | None:
+        """Returns list of three available users if found. Otherwise returns None."""
         availables = []
         for user in self.users.values():
             if user.name == owner or user.storing_gb > self.avg_storage:
@@ -128,9 +127,7 @@ class Server:
         self.send_to_client(resp, owner.current_addr)
 
     def send_file_list(self, request: GetFileList, addr: tuple):
-        self.send_to_client(
-            FileListResp(files=[file.name for file in self.users[self.clients[addr]].owned_files]), addr
-        )
+        self.send_to_client(FileListResp(files=[file.name for file in self.users[self.clients[addr]].owned_files]), addr)
 
     def handle_file_request(self, req: GetFileReq, addr: tuple):
         user = self.users[self.clients[addr]]
@@ -162,7 +159,7 @@ class Server:
             case "find_location_for_data":
                 owner = self.users[task["client"]]
                 file = task["file"]
-                availables = self.find_location_for_data(owner.name, file.name)
+                availables = self.find_location_for_data(owner.name)
                 if not availables:
                     self.task_wait_queue.append((None, task))
                     return
@@ -173,16 +170,14 @@ class Server:
     def handle_client(self, client_addr, msg: dict):
         match msg["cmd"]:
             case "send_file_req":
-                file_req_msg = SendFileReq(
-                    file_name=msg["name"], file_hash=msg["hash"], size=msg["size"], nonce=msg["nonce"], stripes=msg["stripes"],
-                )
+                file_req_msg = SendFileReq.from_dict(msg)
                 self.handle_file_req(self.clients[client_addr], file_req_msg)
                 return
             case "get_file_list":
                 self.send_file_list(GetFileList(), client_addr)
                 return
             case "get_file_req":
-                self.handle_file_request(GetFileReq(file_name=msg["file"]), addr=client_addr)
+                self.handle_file_request(GetFileReq.from_dict(msg), addr=client_addr)
                 return
         logging.debug(f"Message contained invalid command: {msg}")
 
@@ -210,8 +205,13 @@ class Server:
             match msg["cmd"]:
                 case "send_public_key":
                     msg = SendPublicKey(msg["key"])
-                    task = encryption_utils.HandshakeWithClientTask(private_key=self.private_key, public_key=self.public_key,
-                                                                    client_addr=addr, sock=self.sock, client_msg=msg,)
+                    task = encryption_utils.HandshakeWithClientTask(
+                        private_key=self.private_key,
+                        public_key=self.public_key,
+                        client_addr=addr,
+                        sock=self.sock,
+                        client_msg=msg,
+                    )
                     fernet = task.exchange_keys()
                     self.fernets[addr] = fernet
         except json.JSONDecodeError:
@@ -223,10 +223,9 @@ class Server:
     def handle_logins(self, msg: dict, addr: ADDRESS):
         match msg["cmd"]:
             case "register":
-                self.register_client(Register(name=msg["name"], key=msg["key"], password_hash=msg["password"]), addr)
+                self.register_client(Register.from_dict(msg), addr)
             case "login":
-                self.load_client(Login(name=msg["name"], password_hash=msg["password"]), address=addr)
-                pass
+                self.load_client(Login.from_dict(msg), address=addr)
 
     def receive_data(self):
         while True:

@@ -1,17 +1,10 @@
-import logging
 import json
 import os.path
 import socket
-import time
 from collections import deque
 from threading import Thread
-from typing import List, Optional, Tuple, Deque, Dict
-
-import cryptography.fernet
-
-from client_dataclasses import *
-from protocol import *
-from settings import *
+from typing import Deque
+from cryptography.fernet import InvalidToken
 from utils import *
 from math import ceil
 from TaskHandler import *
@@ -87,8 +80,7 @@ class Client:
     def req_send_file(self, absolute_path: str):
         file = abstract_file(absolute_path, key=self.chacha_key)
         dicts = [
-            {"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first}
-            for stripe in file.stripes
+            {"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first} for stripe in file.stripes
         ]
         self.files_on_server[file.name] = file
         request = SendFileReq(file_name=file.name, file_hash=file.hash, size=file.len, nonce=encode_for_json(file.nonce), stripes=dicts)
@@ -102,9 +94,7 @@ class Client:
         time.sleep(0.1)
         k = 0
         while k * MAX_DATA_SIZE < len(data):
-            append_stripe_msg = AppendStripe(
-                id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE:(k + 1) * MAX_DATA_SIZE])
-            )
+            append_stripe_msg = AppendStripe(id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE]))
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
             time.sleep(SEND_DELAY)
@@ -125,9 +115,7 @@ class Client:
         k = 0
         while k * MAX_DATA_SIZE < len(data):
             self.send_to_peer(
-                AppendGetStripe(
-                    stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])
-                ),
+                AppendGetStripe(stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])),
                 peer_addr,
             )
             time.sleep(SEND_DELAY)
@@ -166,15 +154,14 @@ class Client:
             case "connect_to_peer":
                 self.connect_to_peer(ConnectToPeer.from_dict(msg))
             case "send_file_resp":
-                self.handle_file_resp(SendFileResp(file_name=msg["name"], stripes=msg["stripes"]))
+                self.handle_file_resp(SendFileResp.from_dict(msg))
             case "file_list_resp":
-                self.handle_file_list_resp(FileListResp(files=msg["files"]))
+                self.handle_file_list_resp(FileListResp.from_dict(msg))
             case "get_file_resp":
-                self.create_recv_file_handler(GetFileResp(file_name=msg["file"], nonce=msg["nonce"], stripes=msg["stripes"]))
+                self.create_recv_file_handler(GetFileResp.from_dict(msg))
                 # todo you were here
 
     def handle_peer(self, task: Tuple[ADDRESS, dict]):
-        print('handling peer')
         addr = task[0]
         msg = task[1]
         match msg["cmd"]:
@@ -184,24 +171,19 @@ class Client:
                     return
                 self.remove_peer(addr)
             case "new_stripe":
-                print("got new stripe")
                 self.stripe_handlers[msg["id"]] = RecvStripeHandler(
-                    NewStripe(id=msg["id"], size=msg["size"], amount=msg["amount"]),
+                    NewStripe.from_dict(msg),
                     temp_dir_path=TEMP_PEER_STRIPE_PATH,
                     final_dir_path=BACKUP_PATH,
                 )
             case "append_stripe":
-                self.stripe_handlers[msg["id"]].new_append(AppendStripe(id=msg["id"], raw=msg["raw"], seq=msg["seq"]))
+                self.stripe_handlers[msg["id"]].new_append(AppendStripe.from_dict(msg))
             case "get_stripe":
-                self.handle_get_stripe(GetStripe(stripe_id=msg["id"]), addr)
+                self.handle_get_stripe(GetStripe.from_dict(msg), addr)
             case "get_stripe_resp":
-                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].new_recv_handler(
-                    GetStripeResp(stripe_id=msg["id"], amount=msg["amount"], size=msg["size"])
-                )
+                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].new_recv_handler(GetStripeResp.from_dict(msg))
             case "append_get_stripe":
-                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].append_stripe(
-                    AppendGetStripe(stripe_id=msg["id"], seq=msg["seq"], raw=msg["raw"])
-                )
+                self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].append_stripe(AppendGetStripe.from_dict(msg))
             case "connect":
                 self.add_peer(addr, Connect.from_dict(msg))
 
@@ -244,7 +226,7 @@ class Client:
                 else:
                     print(f"unknown addr: {addr}")
 
-            except (json.JSONDecodeError, TypeError, cryptography.fernet.InvalidToken) as e:
+            except (json.JSONDecodeError, TypeError, InvalidToken) as e:
                 print(f"Invalid data from address {addr}\ndata: {data.decode()}\n{e=}")
 
 
@@ -261,15 +243,21 @@ def main():
         client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")
 
-    private_key = encryption_utils.load_private_ecdh_key(fr"{CLIENT_KEYS_PATH}{name}\private.pem")
-    public_key = encryption_utils.load_public_ecdh_key(fr"{CLIENT_KEYS_PATH}{name}\public.pem")
+    private_key = encryption_utils.load_private_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\private.pem")
+    public_key = encryption_utils.load_public_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\public.pem")
     f = encryption_utils.HandshakeWithServerTask(
-        private_key=private_key, public_key=public_key, server_addr=SERVER_ADDR, sock=client.sock).begin()
+        private_key=private_key, public_key=public_key, server_addr=SERVER_ADDR, sock=client.sock
+    ).begin()
     client.server_fernet = f
     password = "lalalolo"
     hashed_password = encryption_utils.hash_password(password)
-    register_task = encryption_utils.RegisterToServerTask(name=client.name, password_hash=hashed_password, sock=client.sock,
-                                                          file_encryption_key=client.chacha_key, fernet=client.server_fernet)
+    register_task = encryption_utils.RegisterToServerTask(
+        name=client.name,
+        password_hash=hashed_password,
+        sock=client.sock,
+        file_encryption_key=client.chacha_key,
+        fernet=client.server_fernet,
+    )
     register_task.begin()
 
     receive_thread = Thread(target=client.receive_data)

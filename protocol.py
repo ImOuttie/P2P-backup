@@ -1,5 +1,4 @@
-from abc import abstractmethod
-from typing import List, Dict, Any, TypedDict, TypeVar, Type
+from typing import List, TypedDict, TypeVar, Type
 from enum import IntEnum
 
 
@@ -36,7 +35,7 @@ class ServerLoginResponse(IntEnum):
 
 
 FILENAME = str
-T = TypeVar('T', bound='Parent')
+T = TypeVar("T", bound="Parent")
 
 
 class Message:
@@ -96,21 +95,33 @@ class SendPublicKey(Message):
             "key": self.public_key,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(public_key=as_dict["key"])
+
 
 class Register(Message):
     def __init__(self, name: str, key: str, password_hash: str):
         self._cmd = "register"
         self.name = name
-        self.password_hash = password_hash
         self.file_encryption_key = key
+        self.password_hash = password_hash
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "name": self.name,
-            "password": self.password_hash,
             "key": self.file_encryption_key,
+            "password": self.password_hash,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            name=as_dict["name"],
+            key=as_dict["key"],
+            password_hash=as_dict["password"],
+        )
 
 
 class Login(Message):
@@ -125,6 +136,10 @@ class Login(Message):
             "name": self.name,
             "password": self.password_hash,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(name=as_dict["name"], password_hash=as_dict["password"])
 
 
 class Connect(Message):
@@ -160,7 +175,11 @@ class ConnectToPeer(Message):
 
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls(peer_name=as_dict["name"], peer_address=as_dict["peer_address"], fernet_key=as_dict["key"])
+        return cls(
+            peer_name=as_dict["name"],
+            peer_address=as_dict["peer_address"],
+            fernet_key=as_dict["key"],
+        )
 
 
 class ReceivedConnection(Message):
@@ -175,6 +194,10 @@ class ReceivedConnection(Message):
             "name": self.name,
             "accept": self.accept,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(name=as_dict["name"], accept=as_dict["accept"])
 
 
 class SendFileReq(Message):
@@ -196,6 +219,16 @@ class SendFileReq(Message):
             "stripes": self.stripes,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            file_name=as_dict["name"],
+            file_hash=as_dict["hash"],
+            size=as_dict["size"],
+            nonce=as_dict["nonce"],
+            stripes=as_dict["stripes"],
+        )
+
 
 class SendFileResp(Message):
     def __init__(self, file_name: str, stripes: List[SendFileRespStripe]):
@@ -209,6 +242,10 @@ class SendFileResp(Message):
             "name": self.file_name,
             "stripes": self.stripes,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(file_name=as_dict["name"], stripes=as_dict["stripes"])
 
 
 class NewStripe(Message):
@@ -226,6 +263,14 @@ class NewStripe(Message):
             "amount": self.amount,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            id=as_dict["id"],
+            size=as_dict["size"],
+            amount=as_dict["amount"],
+        )
+
 
 class AppendStripe(Message):
     def __init__(self, id: str, raw: str, seq: int):
@@ -242,6 +287,14 @@ class AppendStripe(Message):
             "seq": self.seq,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            id=as_dict["id"],
+            raw=as_dict["raw"],
+            seq=as_dict["seq"],
+        )
+
 
 class GetFileList(Message):
     def __init__(self):
@@ -251,6 +304,10 @@ class GetFileList(Message):
         return {
             "cmd": self._cmd,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls()
 
 
 class FileListResp(Message):
@@ -264,6 +321,10 @@ class FileListResp(Message):
             "files": self.files,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(files=as_dict["files"])
+
 
 class GetFileReq(Message):
     def __init__(self, file_name: str):
@@ -275,6 +336,10 @@ class GetFileReq(Message):
             "cmd": self._cmd,
             "file": self.file_name,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(file_name=as_dict["file"])
 
 
 class GetFileResp(Message):
@@ -292,6 +357,14 @@ class GetFileResp(Message):
             "stripes": self.stripes,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            file_name=as_dict["file"],
+            nonce=as_dict["nonce"],
+            stripes=as_dict["stripes"],
+        )
+
 
 class GetStripe(Message):
     def __init__(self, stripe_id: str):
@@ -303,6 +376,10 @@ class GetStripe(Message):
             "cmd": self._cmd,
             "id": self.stripe_id,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(stripe_id=as_dict["id"])
 
 
 class GetStripeResp(Message):
@@ -320,6 +397,14 @@ class GetStripeResp(Message):
             "size": self.size,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            stripe_id=as_dict["id"],
+            amount=as_dict["amount"],
+            size=as_dict["size"],
+        )
+
 
 class AppendGetStripe(Message):
     def __init__(self, stripe_id: str, seq: int, raw: str):
@@ -336,3 +421,10 @@ class AppendGetStripe(Message):
             "seq": self.seq,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(
+            stripe_id=as_dict["id"],
+            seq=as_dict["seq"],
+            raw=as_dict["raw"],
+        )

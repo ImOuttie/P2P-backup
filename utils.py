@@ -1,9 +1,5 @@
-import binascii
 import os
-from itertools import cycle, islice
-
 from Crypto.Cipher import ChaCha20
-
 from settings import *
 from typing import Tuple, List
 import uuid
@@ -36,12 +32,12 @@ def get_parity(data1: bytes, *other_data: bytes) -> bytes:
 
 
 def fragment_data(data: bytes) -> Tuple[bytes, bytes]:
-    """ Returns tuple of (even_bytes, uneven_bytes). """
+    """Returns tuple of (even_bytes, uneven_bytes)."""
     return data[::2], data[1::2]
 
 
 def defragment_data(data1: bytes, data2: bytes) -> bytes:
-    """ Defragments data stripes and returns the original data. """
+    """Defragments data stripes and returns the original data."""
     defrag = []
     for byte1, byte2 in zip(data1, data2):
         defrag.append(byte1)
@@ -68,7 +64,7 @@ def save_temp_stripe(id: str, data: bytes, temppath="temp/stripes/"):
 
 
 def save_file_in_restore(name: str, data, path=RESTORE_PATH):
-    """ Writes data to file and saves it in restore path, unless specified otherwise. """
+    """Writes data to file and saves it in restore path, unless specified otherwise."""
     with open(path + name, "wb") as f:
         f.write(data)
 
@@ -106,17 +102,17 @@ def append_to_file(file_id: str, data: bin, path=BACKUP_PATH):
 
 
 def encode_for_json(data: bytes) -> str:
-    """" Encodes data to base64 string. """
+    """ " Encodes data to base64 string."""
     return str(base64.b64encode(data), encoding="ASCII")
 
 
 def decode_from_json(data: str) -> bytes:
-    """ Decodes base64 string to bytes. """
+    """Decodes base64 string to bytes."""
     return base64.b64decode(data)
 
 
 def remove_temp_stripes(*ids: str, path="temp/stripes/"):
-    """ Removes any amount of temp stripes, as long as they're in the same directory, by id (name). """
+    """Removes any amount of temp stripes, as long as they're in the same directory, by id (name)."""
     for stripe_id in ids:
         try:
             os.remove(path + stripe_id)
@@ -125,7 +121,7 @@ def remove_temp_stripes(*ids: str, path="temp/stripes/"):
 
 
 def update_stripe_location(file: File, stripe_id: str, location: str):
-    """ Updates stripe location (peer name) by file and stripe id. """
+    """Updates stripe location (peer name) by file and stripe id."""
     for stripe in file.stripes:
         if stripe.id == stripe_id:
             stripe.location = location
@@ -133,7 +129,7 @@ def update_stripe_location(file: File, stripe_id: str, location: str):
 
 
 def find_file_by_name(files: List[File] | List[UserFile], filename: str) -> File | UserFile | None:
-    """ Finds and returns file (dataclass representation) from list of files by filename. If not found returns None."""
+    """Finds and returns file (dataclass representation) from list of files by filename. If not found returns None."""
     for file in files:
         if file.name == filename:
             return file
@@ -170,7 +166,7 @@ def get_data_from_stripe_ids(id_first: str, id_second: str, dir_path=RESTORE_STR
 
 
 def move_stripe(stripe_id: str, origin_dir: str, destination_dir: str):
-    """ Moves stripe by id and from one directory to another. """
+    """Moves stripe by id and from one directory to another."""
     with open(origin_dir + stripe_id, "rb") as f:
         data = f.read()
     with open(destination_dir + stripe_id, "wb") as f:
@@ -179,19 +175,17 @@ def move_stripe(stripe_id: str, origin_dir: str, destination_dir: str):
 
 
 def get_chacha_key() -> bytes:
-    """ Returns suitable key for the ChaCha20 algorithm; 32 random bytes. """
+    """Returns suitable key for the ChaCha20 algorithm; 32 random bytes."""
     return os.urandom(32)
 
 
 def encrypt_file_data(plaintext: bytes, key: bytes) -> Tuple[bytes, bytes]:
-    """ Encrypts plaintext using the ChaCha20 algorithm. Returns nonce which is required for decrypting the file. """
+    """Encrypts plaintext using the ChaCha20 algorithm. Returns nonce which is required for decrypting the file."""
     cipher = ChaCha20.new(key=key)
     return cipher.encrypt(plaintext), cipher.nonce
 
 
 def decrypt_file_data(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
-    """ Decrypts ChaCha20 ciphertext. The nonce which was used for encryption is required. """
+    """Decrypts ChaCha20 ciphertext. The nonce which was used for encryption is required."""
     cipher = ChaCha20.new(key=key, nonce=nonce)
     return cipher.decrypt(ciphertext)
-
-

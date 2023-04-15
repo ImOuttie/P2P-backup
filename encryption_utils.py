@@ -51,28 +51,21 @@ def deserialize_private_key(key: bytes) -> EllipticCurvePrivateKey:
 
 
 def serialize_public_key(key: EllipticCurvePublicKey) -> bytes:
-    return key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
+    return key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
 
 
 def serialize_private_key(key: EllipticCurvePrivateKey) -> bytes:
     return key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
+        encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()
     )
 
 
 def generate_ecdh_keys(path_private: str, path_public: str) -> Tuple[EllipticCurvePrivateKey, EllipticCurvePublicKey]:
-    with open(path_private, 'wb') as f:
-        private_key = ec.generate_private_key(
-            CURVE
-        )
+    with open(path_private, "wb") as f:
+        private_key = ec.generate_private_key(CURVE)
         serialized_private = serialize_private_key(private_key)
         f.write(serialized_private)
-    with open(path_public, 'wb') as f:
+    with open(path_public, "wb") as f:
         public_key = private_key.public_key()
         serialized_public = serialize_public_key(public_key)
         f.write(serialized_public)
@@ -80,7 +73,7 @@ def generate_ecdh_keys(path_private: str, path_public: str) -> Tuple[EllipticCur
 
 
 def load_public_ecdh_key(path: str) -> EllipticCurvePublicKey:
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         loaded_public_key = serialization.load_pem_public_key(
             f.read(),
         )
@@ -88,7 +81,7 @@ def load_public_ecdh_key(path: str) -> EllipticCurvePublicKey:
 
 
 def load_private_ecdh_key(path: str) -> EllipticCurvePrivateKey:
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         loaded_private_key = serialization.load_pem_private_key(
             f.read(),
             # or password=None, if in plain text
@@ -103,7 +96,7 @@ def get_fernet(public_key: EllipticCurvePublicKey, private_key: EllipticCurvePri
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=b'handshake data',
+        info=b"handshake data",
     ).derive(shared_key)
     derived_key = base64.urlsafe_b64encode(derived_key)
     return Fernet(derived_key)
@@ -126,8 +119,14 @@ def str_to_public_key(key: str) -> EllipticCurvePublicKey:
 
 
 class HandshakeWithClientTask:
-    def __init__(self, private_key: EllipticCurvePrivateKey, public_key: EllipticCurvePublicKey, client_addr: ADDRESS, sock: socket,
-                 client_msg: protocol.SendPublicKey):
+    def __init__(
+        self,
+        private_key: EllipticCurvePrivateKey,
+        public_key: EllipticCurvePublicKey,
+        client_addr: ADDRESS,
+        sock: socket,
+        client_msg: protocol.SendPublicKey,
+    ):
         self.private_key = private_key
         self.public_key = public_key
         self.client_addr = client_addr
@@ -272,13 +271,11 @@ class ConnectToPeerTask:
 
 
 def main():
-    generate_ecdh_keys(fr"{settings.CLIENT_KEYS_PATH}alice\private.pem", fr"{settings.CLIENT_KEYS_PATH}alice\public.pem")
-    generate_ecdh_keys(fr"{settings.CLIENT_KEYS_PATH}bob\private.pem", fr"{settings.CLIENT_KEYS_PATH}bob\public.pem")
-    generate_ecdh_keys(fr"{settings.CLIENT_KEYS_PATH}charlie\private.pem", fr"{settings.CLIENT_KEYS_PATH}charlie\public.pem")
-    generate_ecdh_keys(fr"{settings.CLIENT_KEYS_PATH}dan\private.pem", fr"{settings.CLIENT_KEYS_PATH}dan\public.pem")
+    generate_ecdh_keys(rf"{settings.CLIENT_KEYS_PATH}alice\private.pem", rf"{settings.CLIENT_KEYS_PATH}alice\public.pem")
+    generate_ecdh_keys(rf"{settings.CLIENT_KEYS_PATH}bob\private.pem", rf"{settings.CLIENT_KEYS_PATH}bob\public.pem")
+    generate_ecdh_keys(rf"{settings.CLIENT_KEYS_PATH}charlie\private.pem", rf"{settings.CLIENT_KEYS_PATH}charlie\public.pem")
+    generate_ecdh_keys(rf"{settings.CLIENT_KEYS_PATH}dan\private.pem", rf"{settings.CLIENT_KEYS_PATH}dan\public.pem")
 
 
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
