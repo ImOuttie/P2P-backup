@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import List, Dict, Any, TypedDict
+from typing import List, Dict, Any, TypedDict, TypeVar, Type
+from enum import IntEnum
 
 
 class GetFileRespStripe(TypedDict):
@@ -23,7 +24,19 @@ class SendFileReqStripe(TypedDict):
     is_first: bool
 
 
+class ServerRegisterResponse(IntEnum):
+    SUCCESS = 1
+    NAME_TAKEN = 2
+
+
+class ServerLoginResponse(IntEnum):
+    SUCCESS = 1
+    NAME_INVALID = 2
+    INCORRECT_PASSWORD = 3
+
+
 FILENAME = str
+T = TypeVar('T', bound='Parent')
 
 
 class Message:
@@ -35,22 +48,46 @@ class Message:
     def to_dict(self) -> dict:
         raise NotImplementedError
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        raise NotImplementedError
 
-class Authenticate(Message):
-    def __init__(self, public_key: str):
-        self._cmd = "authenticate"
-        self.public_key = public_key
+
+class RegisterResp(Message):
+    def __init__(self, resp: ServerRegisterResponse):
+        self._cmd = "register_resp"
+        self.resp = resp
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
-            "key": self.public_key,
+            "resp": self.resp,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(resp=as_dict["resp"])
 
-class AuthenticateResp(Message):
+
+class LoginResp(Message):
+    def __init__(self, resp: ServerLoginResponse):
+        self._cmd = "login_resp"
+        self.resp = resp
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "resp": self.resp,
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(resp=as_dict["resp"])
+
+
+class SendPublicKey(Message):
     def __init__(self, public_key: str):
-        self._cmd = "authenticate_resp"
+        self._cmd = "send_public_key"
         self.public_key = public_key
 
     def to_dict(self) -> dict:
@@ -61,28 +98,32 @@ class AuthenticateResp(Message):
 
 
 class Register(Message):
-    def __init__(self, name: str, key: str):
+    def __init__(self, name: str, key: str, password_hash: str):
         self._cmd = "register"
         self.name = name
-        self.key = key
+        self.password_hash = password_hash
+        self.file_encryption_key = key
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "name": self.name,
-            "key": self.key,
+            "password": self.password_hash,
+            "key": self.file_encryption_key,
         }
 
 
 class Login(Message):
-    def __init__(self, name: str):
-        self._cmd = "Login"
+    def __init__(self, name: str, password_hash: str):
+        self._cmd = "login"
         self.name = name
+        self.password_hash = password_hash
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
-            "name": self.name
+            "name": self.name,
+            "password": self.password_hash,
         }
 
 
@@ -97,21 +138,29 @@ class Connect(Message):
             "name": self.name,
         }
 
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(name=as_dict["name"])
+
 
 class ConnectToPeer(Message):
-    def __init__(self, peer_name: str, peer_address: tuple, key: str = 'removelater'):
+    def __init__(self, peer_name: str, peer_address: tuple, fernet_key: str):
         self._cmd = "connect_to_peer"
         self.peer_name = peer_name
-        self.peer_address = peer_address
-        self.key = key
+        self.peer_address = tuple(peer_address)
+        self.fernet_key = fernet_key
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "name": self.peer_name,
             "peer_address": self.peer_address,
-            "key": self.key,
+            "key": self.fernet_key,
         }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(peer_name=as_dict["name"], peer_address=as_dict["peer_address"], fernet_key=as_dict["key"])
 
 
 class ReceivedConnection(Message):

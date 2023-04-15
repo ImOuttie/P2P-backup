@@ -1,4 +1,3 @@
-import base64
 import logging
 import json
 import os.path
@@ -7,18 +6,25 @@ import time
 from collections import deque
 from threading import Thread
 from typing import List, Optional, Tuple, Deque, Dict
+
+import cryptography.fernet
+
 from client_dataclasses import *
 from protocol import *
 from settings import *
 from utils import *
 from math import ceil
 from TaskHandler import *
+import encryption_utils
+from cryptography.fernet import Fernet
+
 
 FILE_NAME: str
 STRIPE_ID: str
 NAME: str
 FINAL_IN_SEQ: int
 TASK: dict
+ADDRESS = tuple
 
 
 class Client:
@@ -38,17 +44,28 @@ class Client:
         self.stripe_to_filename: Dict[STRIPE_ID, FILE_NAME] = {}
         self.chacha_key = chacha_key
         self.nonces: Dict[FILE_NAME, bytes] = {}
+        self.server_fernet = None
+        self.peer_fernets: Dict[ADDRESS, Fernet] = {}
 
     def send_to_peer(self, msg: Message, addr: tuple):
         data = json.dumps(msg.to_dict()).encode()
+        if addr in self.peer_fernets:
+            data = encryption_utils.encrypt_with_fernet(self.peer_fernets[addr], data)
+        else:
+            logging.warning(f"no fernet for peer in addr: {addr}")
         self.sock.sendto(data, addr)
 
     def send_to_server(self, msg: Message):
         data = json.dumps(msg.to_dict()).encode()
-        self.sock.sendto(data, self._server_addr)
+        encrypted = encryption_utils.encrypt_with_fernet(self.server_fernet, data)
+        self.sock.sendto(encrypted, self._server_addr)
 
     def connect_to_peer(self, msg: ConnectToPeer):
+        if msg.peer_address in self.peer_fernets:
+            logging.debug(f"Peer in addr {msg.peer_address} is already known")
+            return
         print(f"connecting to peer: {msg.peer_name} on address {msg.peer_address}")
+        self.peer_fernets[msg.peer_address] = encryption_utils.get_fernet_from_b64(msg.fernet_key)
         connect_msg = Connect(name=self.name)
         self.send_to_peer(connect_msg, msg.peer_address)
 
@@ -56,15 +73,16 @@ class Client:
         try:
             del self.peer_names[self.peers[address]]
             del self.peers[address]
+            del self.peer_fernets[address]
         except KeyError:
             print(f"No such client: {address}")
 
-    def add_peer(self, addr, name):
+    def add_peer(self, addr, msg: Connect):
         if addr in self.peers:
-            logging.debug(f"Peer {name} on address {addr} is already known")
+            logging.debug(f"Peer {msg.name} on address {addr} is already known")
             return
-        self.peers[addr] = name
-        self.peer_names[name] = addr
+        self.peers[addr] = msg.name
+        self.peer_names[msg.name] = addr
 
     def req_send_file(self, absolute_path: str):
         file = abstract_file(absolute_path, key=self.chacha_key)
@@ -85,7 +103,7 @@ class Client:
         k = 0
         while k * MAX_DATA_SIZE < len(data):
             append_stripe_msg = AppendStripe(
-                id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])
+                id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE:(k + 1) * MAX_DATA_SIZE])
             )
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
@@ -146,7 +164,7 @@ class Client:
     def handle_server(self, msg: dict):
         match msg["cmd"]:
             case "connect_to_peer":
-                self.connect_to_peer(ConnectToPeer(peer_name=msg["name"], peer_address=tuple(msg["peer_address"])))
+                self.connect_to_peer(ConnectToPeer.from_dict(msg))
             case "send_file_resp":
                 self.handle_file_resp(SendFileResp(file_name=msg["name"], stripes=msg["stripes"]))
             case "file_list_resp":
@@ -155,7 +173,8 @@ class Client:
                 self.create_recv_file_handler(GetFileResp(file_name=msg["file"], nonce=msg["nonce"], stripes=msg["stripes"]))
                 # todo you were here
 
-    def handle_peer(self, task: Tuple[tuple, dict]):
+    def handle_peer(self, task: Tuple[ADDRESS, dict]):
+        print('handling peer')
         addr = task[0]
         msg = task[1]
         match msg["cmd"]:
@@ -165,6 +184,7 @@ class Client:
                     return
                 self.remove_peer(addr)
             case "new_stripe":
+                print("got new stripe")
                 self.stripe_handlers[msg["id"]] = RecvStripeHandler(
                     NewStripe(id=msg["id"], size=msg["size"], amount=msg["amount"]),
                     temp_dir_path=TEMP_PEER_STRIPE_PATH,
@@ -173,7 +193,6 @@ class Client:
             case "append_stripe":
                 self.stripe_handlers[msg["id"]].new_append(AppendStripe(id=msg["id"], raw=msg["raw"], seq=msg["seq"]))
             case "get_stripe":
-                print("got get_stripe")
                 self.handle_get_stripe(GetStripe(stripe_id=msg["id"]), addr)
             case "get_stripe_resp":
                 self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].new_recv_handler(
@@ -183,6 +202,8 @@ class Client:
                 self.recv_file_handlers[self.stripe_to_filename[msg["id"]]].append_stripe(
                     AppendGetStripe(stripe_id=msg["id"], seq=msg["seq"], raw=msg["raw"])
                 )
+            case "connect":
+                self.add_peer(addr, Connect.from_dict(msg))
 
     def handle_tasks(self):
         while True:
@@ -200,7 +221,7 @@ class Client:
             if addr == self._server_addr:
                 self.handle_server(msg)  # if task not finished
                 continue
-            elif addr in self.peers:
+            elif addr in self.peers or addr in self.peer_fernets:
                 self.handle_peer(task)
                 continue
             elif addr is None:
@@ -208,19 +229,23 @@ class Client:
 
     def receive_data(self):
         while True:
-            data, addr = self.sock.recvfrom(1024)
+            data, addr = self.sock.recvfrom(2048)
             try:
-                msg = json.loads(data.decode())
+                if self.server_fernet is None:
+                    continue
                 if addr == self._server_addr:
+                    msg = encryption_utils.decrypt_fernet_to_json(self.server_fernet, data)
                     logging.debug(f"Received message from server: {msg}")
                     self.tasks.append((addr, msg))
-                elif addr in self.peers:
+                elif addr in self.peer_fernets:
+                    msg = encryption_utils.decrypt_fernet_to_json(self.peer_fernets[addr], data)
                     logging.debug(f"Received message from peer: {addr} msg: {msg}")
                     self.tasks.append((addr, msg))
-                elif msg["cmd"] == "connect":
-                    self.add_peer(addr, msg["name"])
-            except json.JSONDecodeError:
-                print(f"Invalid JSON format for data: {data.decode()}")
+                else:
+                    print(f"unknown addr: {addr}")
+
+            except (json.JSONDecodeError, TypeError, cryptography.fernet.InvalidToken) as e:
+                print(f"Invalid data from address {addr}\ndata: {data.decode()}\n{e=}")
 
 
 def main():
@@ -235,19 +260,29 @@ def main():
     if not LOCALHOST:
         client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")
+
+    private_key = encryption_utils.load_private_ecdh_key(fr"{CLIENT_KEYS_PATH}{name}\private.pem")
+    public_key = encryption_utils.load_public_ecdh_key(fr"{CLIENT_KEYS_PATH}{name}\public.pem")
+    f = encryption_utils.HandshakeWithServerTask(
+        private_key=private_key, public_key=public_key, server_addr=SERVER_ADDR, sock=client.sock).begin()
+    client.server_fernet = f
+    password = "lalalolo"
+    hashed_password = encryption_utils.hash_password(password)
+    register_task = encryption_utils.RegisterToServerTask(name=client.name, password_hash=hashed_password, sock=client.sock,
+                                                          file_encryption_key=client.chacha_key, fernet=client.server_fernet)
+    register_task.begin()
+
     receive_thread = Thread(target=client.receive_data)
     task_thread = Thread(target=client.handle_tasks)
     receive_thread.start()
     task_thread.start()
-    register_msg = Register(name=client.name, key=encode_for_json(get_chacha_key()))
 
-    client.send_to_server(register_msg)
     if name == "alice":
         time.sleep(1.5)
         client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")
-        time.sleep(2)
+        time.sleep(3)
         client.request_file_list()
-        time.sleep(1.5)
+        time.sleep(3)
         client.request_file("text.txt")
         time.sleep(3)
         client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\video.mp4")

@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
-from utils import *
 from typing import List, Dict
-from enum import Enum, auto
 
 STRIPE_ID = str
 
@@ -11,7 +9,8 @@ class FileStripe:
     hash: str
     is_parity: bool
     is_first: bool
-    id: STRIPE_ID = str
+    id: STRIPE_ID
+    file_db_id: int = -1
     location: str = field(default_factory=str)  # name of user who stores file
 
 
@@ -22,6 +21,7 @@ class UserFile:
     hash: str
     len: int
     nonce: str
+    file_db_id: int = -1
     stripes: List[FileStripe] = field(default_factory=list)
 
 
@@ -30,5 +30,6 @@ class User:
     name: str
     current_addr: tuple
     storing_gb: float = 0
+    user_db_id: int = -1
     owned_files: List[UserFile] = field(default_factory=list)
     stripes_saved: Dict[STRIPE_ID, FileStripe] = field(default_factory=dict)
