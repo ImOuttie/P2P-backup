@@ -2,4 +2,6 @@ temp.py
 test.py
 server.db
 __pycache__
+/database/__pycache__
+/database/server.db
 *.mp4

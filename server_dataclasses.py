@@ -10,6 +10,7 @@ class FileStripe:
     is_parity: bool
     is_first: bool
     id: STRIPE_ID
+    stripe_db_id: int = -1
     file_db_id: int = -1
     location: str = field(default_factory=str)  # name of user who stores file
 

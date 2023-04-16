@@ -21,7 +21,7 @@ ADDRESS = tuple
 
 
 class Client:
-    def __init__(self, name: str, port: int, chacha_key=os.urandom(32)):
+    def __init__(self, name: str, port: int, chacha_key=None):
         self.name = name
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((CLIENT_IP, port))
@@ -78,6 +78,12 @@ class Client:
         self.peer_names[msg.name] = addr
 
     def req_send_file(self, absolute_path: str):
+        # check if file encryption key is known:
+        if self.chacha_key is None:
+            self.send_to_server(GetFileKey())
+            self.tasks.append((None, {"task": "req_send_file", "path": absolute_path}))
+            return
+
         file = abstract_file(absolute_path, key=self.chacha_key)
         dicts = [
             {"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first} for stripe in file.stripes
@@ -89,12 +95,14 @@ class Client:
     def send_stripe(self, stripe_id: str, peer_addr: tuple):
         with open("temp/stripes/" + stripe_id, "rb") as f:
             data = f.read()
-        new_stripe_msg = NewStripe(id=stripe_id, size=len(data), amount=ceil(len(data) / MAX_DATA_SIZE))
+        new_stripe_msg = NewStripe(stripe_id=stripe_id, size=len(data), amount=ceil(len(data) / MAX_DATA_SIZE))
         self.send_to_peer(new_stripe_msg, peer_addr)
         time.sleep(0.1)
         k = 0
         while k * MAX_DATA_SIZE < len(data):
-            append_stripe_msg = AppendStripe(id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE]))
+            append_stripe_msg = AppendStripe(
+                stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])
+            )
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
             time.sleep(SEND_DELAY)
@@ -104,7 +112,7 @@ class Client:
     def handle_get_stripe(self, msg: GetStripe, peer_addr: tuple):
         stripe_id = msg.stripe_id
         if not os.path.isfile(BACKUP_PATH + stripe_id):
-            self.task_wait_queue.append((None, {"cmd": "handle_get_stripe", "msg": msg, "addr": peer_addr}))
+            self.task_wait_queue.append((None, {"task": "handle_get_stripe", "msg": msg, "addr": peer_addr}))
             return
         with open(BACKUP_PATH + stripe_id, "rb") as f:
             data = f.read()
@@ -144,10 +152,12 @@ class Client:
             self.stripe_to_filename[msg_stripe["id"]] = file_name
             self.send_to_peer(GetStripe(stripe_id=msg_stripe["id"]), tuple(msg_stripe["addr"]))
 
-    def handle_self(self, msg: dict):
-        match msg["cmd"]:
+    def handle_self(self, task: dict):
+        match task["task"]:
             case "handle_get_stripe":
-                self.handle_get_stripe(msg["msg"], msg["addr"])
+                self.handle_get_stripe(task["msg"], task["addr"])
+            case "req_send_file":
+                self.req_send_file(task["path"])
 
     def handle_server(self, msg: dict):
         match msg["cmd"]:
@@ -159,7 +169,8 @@ class Client:
                 self.handle_file_list_resp(FileListResp.from_dict(msg))
             case "get_file_resp":
                 self.create_recv_file_handler(GetFileResp.from_dict(msg))
-                # todo you were here
+            case "get_file_key_resp":
+                self.chacha_key = GetFileKeyResp.from_dict(msg).key
 
     def handle_peer(self, task: Tuple[ADDRESS, dict]):
         addr = task[0]
@@ -238,7 +249,8 @@ def main():
     else:
         name = sys.argv[1]
         port = int(sys.argv[2])
-    client = Client(name, port)
+    # TODO: save chacha_key
+    client = Client(name, port, chacha_key=os.urandom(32))
     if not LOCALHOST:
         client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")

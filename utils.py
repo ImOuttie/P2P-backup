@@ -10,17 +10,17 @@ import base64
 
 
 def get_unique_id() -> str:
-    """returns (str) hex representation of a unique ID using UUID"""
+    """Returns (str) hex representation of a unique ID using UUID."""
     return str(uuid.uuid1().hex)
 
 
 def get_hash(data: bytes) -> str:
-    """returns (str) hex representation of hash"""
+    """Returns (str) hex representation of hash."""
     return md5(data).digest().hex()
 
 
 def get_parity(data1: bytes, *other_data: bytes) -> bytes:
-    """returns the result of the repeated xor operation on all given (separate) data stripes"""
+    """Returns the result of the repeated xor operation on all given (separate) data stripes."""
     length = len(data1)
     p = int.from_bytes(data1, BYTEORDER)
     for data in other_data:

@@ -12,7 +12,8 @@ from threading import Thread
 import time
 from typing import List, Tuple, Dict, Deque
 from cryptography.fernet import Fernet
-
+from database.sql_loader import SQLLoader
+from pathlib import Path
 
 Files = List[UserFile]
 NAME = str
@@ -32,31 +33,39 @@ class Server:
         self.users: Dict[NAME, User] = {}
         self.task_wait_queue: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.avg_storage = 4
-        self.client_keys: Dict[NAME, KEY] = {}
         self.fernets: Dict[ADDRESS, Fernet] = {}
         self.private_key, self.public_key = encryption_utils.generate_ecdh_keys(
             path_private="keys/server_keys/private.PEM", path_public="keys/server_keys/public.PEM"
         )
-        self.authentications = ...
+        self.database = SQLLoader(db_file_path=DB_PATH)
 
     def load_client(self, msg: Login, address: ADDRESS):
-        # todo: load clint
-        password = msg.password_hash
-        name = msg.name
-        self.clients[address] = name
+        user = self.database.load_user_data(msg.name, address)
+        if user is None:
+            self.send_to_client(LoginResp(ServerLoginResponse.NAME_INVALID), address)
+            return
+        if not self.database.check_user_password(user, msg.password_hash):
+            self.send_to_client(LoginResp(ServerLoginResponse.INCORRECT_PASSWORD), address)
+            return
+        name = user.name
+        self.clients[address] = user.name
         self.names[name] = address
-        self.users[name] = User(name=name, current_addr=address)
+        self.users[name] = user
         self.send_to_client(LoginResp(ServerLoginResponse.SUCCESS), address)
 
     def register_client(self, msg: Register, addr: tuple):
-        name = msg.name
+        if self.database.check_if_user_exist_by_name(msg.name):
+            self.send_to_client(RegisterResp(ServerRegisterResponse.NAME_TAKEN), addr)
+            return
+
+        user = self.database.add_user(msg.name, addr, msg.password_hash, msg.file_encryption_key)
+        name = user.name
         self.clients[addr] = name
         self.names[name] = addr
-        self.users[name] = User(name=name, current_addr=addr)
+        self.users[name] = user
         self.file_names[msg.name] = {}
-        self.client_keys[msg.name] = msg.file_encryption_key
         self.send_to_client(RegisterResp(ServerRegisterResponse.SUCCESS), addr)
-        # todo: insert to db
+        # todo: send file encryption key in sendfileresp or add it
 
     def remove_client(self, address):
         try:
@@ -88,23 +97,17 @@ class Server:
             if client != client_addr:
                 return client
         # if not found client return none
-        return
+        return None
 
-    def handle_file_req(self, user: str, request: SendFileReq):
-        new_file = UserFile(owner=user, hash=request.hash, name=request.file_name, len=request.size, nonce=request.nonce)
-        self.file_names[user][request.file_name] = new_file
-        self.users[user].owned_files.append(new_file)
-        for stripe in request.stripes:
-            new_stripe = FileStripe(
-                hash=stripe["hash"],
-                is_parity=stripe["is_parity"],
-                id=stripe["id"],
-                is_first=stripe["is_first"],
-            )
-            new_file.stripes.append(new_stripe)
-        self.tasks.append((None, {"task": "find_location_for_data", "client": user, "file": new_file}))
+    def handle_file_req(self, user: User, request: SendFileReq):
+        availables = self.find_location_for_data(user.name)
+        if not availables:
+            self.task_wait_queue.append((None, {"task": "find_location_for_data", "client": user, "msg": request}))
+            return
+        file = self.add_file_to_db(user, request, availables)
+        self.send_addrs_to_client(user, availables, file)
 
-    def find_location_for_data(self, owner: str) -> List | None:
+    def find_location_for_data(self, owner: str) -> List[User] | None:
         """Returns list of three available users if found. Otherwise returns None."""
         availables = []
         for user in self.users.values():
@@ -120,9 +123,9 @@ class Server:
         for user in users:
             self.create_connection(owner.current_addr, user.current_addr)
         file_stripes = []
-        for user, filestripe in zip(users, file.stripes):
-            file_stripes.append({"id": filestripe.id, "peer": user.name, "addr": user.current_addr})
-            filestripe.location = user.name
+        for file_stripe in file.stripes:
+            peer_name = file_stripe.location
+            file_stripes.append({"id": file_stripe.id, "peer": peer_name, "addr": self.names[peer_name]})
         resp = SendFileResp(file_name=file.name, stripes=file_stripes)
         self.send_to_client(resp, owner.current_addr)
 
@@ -147,6 +150,7 @@ class Server:
                     "is_first": stripe.is_first,
                     "peer": stripe.location,
                     "addr": self.names[stripe.location],
+                    "hash": stripe.hash,
                 }
             )
             count += 1
@@ -154,50 +158,33 @@ class Server:
                 break
         self.send_to_client(GetFileResp(file_name=req.file_name, stripes=dicts, nonce=file.nonce), addr)
 
-    def handle_self(self, task: dict):
-        match task["task"]:
-            case "find_location_for_data":
-                owner = self.users[task["client"]]
-                file = task["file"]
-                availables = self.find_location_for_data(owner.name)
-                if not availables:
-                    self.task_wait_queue.append((None, task))
-                    return
-                self.send_addrs_to_client(owner, availables, file)
-            case "authenticate":
-                pass
+    def add_file_to_db(self, owner: User, msg: SendFileReq, availables: List[User]) -> UserFile:
+        file_stripes: List[GetFileRespStripe] = []
+        for file_stripe, user in zip(msg.stripes, availables):
+            stripe = {
+                "id": file_stripe["id"],
+                "hash": file_stripe["hash"],
+                "peer": user.name,
+                "addr": user.current_addr,
+                "is_first": file_stripe["is_first"],
+                "is_parity": file_stripe["is_parity"],
+            }
+            file_stripes.append(stripe)
 
-    def handle_client(self, client_addr, msg: dict):
-        match msg["cmd"]:
-            case "send_file_req":
-                file_req_msg = SendFileReq.from_dict(msg)
-                self.handle_file_req(self.clients[client_addr], file_req_msg)
-                return
-            case "get_file_list":
-                self.send_file_list(GetFileList(), client_addr)
-                return
-            case "get_file_req":
-                self.handle_file_request(GetFileReq.from_dict(msg), addr=client_addr)
-                return
-        logging.debug(f"Message contained invalid command: {msg}")
+        file = self.database.add_file(
+            filename=msg.file_name,
+            file_hash=msg.hash,
+            file_len=msg.size,
+            nonce=msg.nonce,
+            user=owner,
+            user_file_stripes=file_stripes,
+        )
+        return file
 
-    def handle_tasks(self):
-        while True:
-            if not self.tasks:
-                if not self.task_wait_queue:
-                    time.sleep(0)  # release GIL; don't waste rest of quantum
-                    continue
-                addr, msg = self.task_wait_queue.pop()
-                if addr:
-                    self.handle_client(addr, msg)
-                else:
-                    self.handle_self(msg)
-                continue
-            addr, msg = self.tasks.popleft()
-            if addr:
-                self.handle_client(addr, msg)
-                continue
-            self.handle_self(msg)
+    def handle_get_file_key(self, msg: GetFileKey, addr: ADDRESS):
+        user = self.users[self.clients[addr]]
+        key = self.database.get_user_file_key(user)
+        self.send_to_client(GetFileKeyResp(key=key), addr)
 
     def handle_auth(self, data: bytes, addr: ADDRESS):
         try:
@@ -219,6 +206,48 @@ class Server:
         # todo: remove raises
         except TypeError as e:
             raise e
+
+    def handle_self(self, task: dict):
+        match task["task"]:
+            case "find_location_for_data":
+                self.handle_file_req(user=self.users[task["client"]], request=task["msg"])
+            case "authenticate":
+                pass
+
+    def handle_client(self, client_addr, msg: dict):
+        match msg["cmd"]:
+            case "send_file_req":
+                file_req_msg = SendFileReq.from_dict(msg)
+                user = self.users[self.clients[client_addr]]
+                self.handle_file_req(user, file_req_msg)
+                return
+            case "get_file_list":
+                self.send_file_list(GetFileList(), client_addr)
+                return
+            case "get_file_req":
+                self.handle_file_request(GetFileReq.from_dict(msg), addr=client_addr)
+                return
+            case "get_file_key":
+                self.handle_get_file_key(GetFileKey.from_dict(msg), client_addr)
+        logging.debug(f"Message contained invalid command: {msg}")
+
+    def handle_tasks(self):
+        while True:
+            if not self.tasks:
+                if not self.task_wait_queue:
+                    time.sleep(0)  # release GIL; don't waste rest of quantum
+                    continue
+                addr, msg = self.task_wait_queue.pop()
+                if addr:
+                    self.handle_client(addr, msg)
+                else:
+                    self.handle_self(msg)
+                continue
+            addr, msg = self.tasks.popleft()
+            if addr:
+                self.handle_client(addr, msg)
+                continue
+            self.handle_self(msg)
 
     def handle_logins(self, msg: dict, addr: ADDRESS):
         match msg["cmd"]:
@@ -247,6 +276,9 @@ class Server:
 
 def main():
     logging.basicConfig(level=LOGLEVEL)
+    if RESTART_DB:
+        if Path(DB_PATH).exists():
+            os.remove(DB_PATH)
     p2p_server = Server()
     logging.debug(f"Server up and running on address {SERVER_IP} port {SERVER_PORT}")
     receive_thread = Thread(target=p2p_server.receive_data)

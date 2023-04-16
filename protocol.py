@@ -4,6 +4,7 @@ from enum import IntEnum
 
 class GetFileRespStripe(TypedDict):
     id: str
+    hash: str
     peer: str
     addr: tuple
     is_first: bool
@@ -40,8 +41,9 @@ T = TypeVar("T", bound="Parent")
 
 class Message:
     """
-    Baseclass for protocol message, every message class
-    Must contain to_dict method so it can be passed to json.
+    Baseclass for protocol message, every message class must contain:
+    to_dict() method so it can be passed to JSON.
+    from_dict() method so the message can be easily initialized.
     """
 
     def to_dict(self) -> dict:
@@ -66,6 +68,36 @@ class RegisterResp(Message):
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
         return cls(resp=as_dict["resp"])
+
+
+class GetFileKey(Message):
+    def __init__(self):
+        self._cmd = "get_file_key"
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls()
+
+
+class GetFileKeyResp(Message):
+    def __init__(self, key: str):
+        self._cmd = "get_file_key_resp"
+        self.key = key
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "key": self.key,
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(key=as_dict["key"])
 
 
 class LoginResp(Message):
@@ -249,9 +281,9 @@ class SendFileResp(Message):
 
 
 class NewStripe(Message):
-    def __init__(self, id: str, size: int, amount: int):
+    def __init__(self, stripe_id: str, size: int, amount: int):
         self.cmd = "new_stripe"
-        self.stripe_id = id
+        self.stripe_id = stripe_id
         self.size = size
         self.amount = amount
 
@@ -266,23 +298,23 @@ class NewStripe(Message):
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
         return cls(
-            id=as_dict["id"],
+            stripe_id=as_dict["id"],
             size=as_dict["size"],
             amount=as_dict["amount"],
         )
 
 
 class AppendStripe(Message):
-    def __init__(self, id: str, raw: str, seq: int):
+    def __init__(self, stripe_id: str, raw: str, seq: int):
         self.cmd = "append_stripe"
-        self.id = id
+        self.stripe_id = stripe_id
         self.raw = raw
         self.seq = seq
 
     def to_dict(self) -> dict:
         return {
             "cmd": self.cmd,
-            "id": self.id,
+            "id": self.stripe_id,
             "raw": self.raw,
             "seq": self.seq,
         }
@@ -290,7 +322,7 @@ class AppendStripe(Message):
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
         return cls(
-            id=as_dict["id"],
+            stripe_id=as_dict["id"],
             raw=as_dict["raw"],
             seq=as_dict["seq"],
         )
