@@ -22,7 +22,7 @@ TEMP_PEER_STRIPE_PATH = r"temp\not_final\\"
 CLIENT_KEYS_PATH = r"keys\client_keys\\"
 DB_PATH = r".\database\server.db"
 
-RESTART_DB = True
+RESTART_DB = False
 SEND_DELAY = 0.01
 MAX_DATA_SIZE = 600
 MAX_PACKET_TIMEOUT = 0.5

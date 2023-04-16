@@ -188,17 +188,19 @@ class LoginToServerTask:
             data, addr = self.sock.recvfrom(1024)
             try:
                 if addr != self._server_addr:
+                    print('bad bad bad')
                     raise Exception(f"Server spoofed \n{data=}\n{addr=}")
                 msg = decrypt_fernet_to_json(self.fernet, data)
                 if msg["cmd"] == "login_resp":
                     msg = protocol.LoginResp.from_dict(msg)
                     if msg.resp == protocol.ServerLoginResponse.SUCCESS:
+                        logging.debug("Successful Login")
                         return
                     # TODO: handle these
                     elif msg.resp == protocol.ServerLoginResponse.INCORRECT_PASSWORD:
-                        logging.exception("incorrect password")
+                        logging.debug("incorrect password")
                     elif msg.resp == protocol.ServerLoginResponse.NAME_INVALID:
-                        logging.exception("invalid name")
+                        logging.debug("invalid name")
             except (json.JSONDecodeError, ValueError):
                 raise Exception(f"bad data: {data}")
 

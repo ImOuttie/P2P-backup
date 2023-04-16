@@ -143,6 +143,10 @@ class Client:
         print(f"files on server: {resp.files}")
 
     def request_file(self, filename: str):
+        if self.chacha_key is None:
+            self.send_to_server(GetFileKey())
+            self.tasks.append((None, {"task": "request_file", "file_name": filename}))
+            return
         self.send_to_server(GetFileReq(file_name=filename))
 
     def create_recv_file_handler(self, msg: GetFileResp):
@@ -158,6 +162,8 @@ class Client:
                 self.handle_get_stripe(task["msg"], task["addr"])
             case "req_send_file":
                 self.req_send_file(task["path"])
+            case "request_file":
+                self.request_file(task["file_name"])
 
     def handle_server(self, msg: dict):
         match msg["cmd"]:
@@ -170,7 +176,7 @@ class Client:
             case "get_file_resp":
                 self.create_recv_file_handler(GetFileResp.from_dict(msg))
             case "get_file_key_resp":
-                self.chacha_key = GetFileKeyResp.from_dict(msg).key
+                self.chacha_key = utils.decode_from_json(GetFileKeyResp.from_dict(msg).key)
 
     def handle_peer(self, task: Tuple[ADDRESS, dict]):
         addr = task[0]
@@ -250,7 +256,7 @@ def main():
         name = sys.argv[1]
         port = int(sys.argv[2])
     # TODO: save chacha_key
-    client = Client(name, port, chacha_key=os.urandom(32))
+    client = Client(name, port)
     if not LOCALHOST:
         client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")
@@ -263,14 +269,23 @@ def main():
     client.server_fernet = f
     password = "lalalolo"
     hashed_password = encryption_utils.hash_password(password)
-    register_task = encryption_utils.RegisterToServerTask(
+    # register_task = encryption_utils.RegisterToServerTask(
+    #     name=client.name,
+    #     password_hash=hashed_password,
+    #     sock=client.sock,
+    #     file_encryption_key=client.chacha_key,
+    #     fernet=client.server_fernet,
+    # )
+    #
+    # register_task.begin()
+
+    login_task = encryption_utils.LoginToServerTask(
         name=client.name,
         password_hash=hashed_password,
         sock=client.sock,
-        file_encryption_key=client.chacha_key,
         fernet=client.server_fernet,
     )
-    register_task.begin()
+    login_task.begin()
 
     receive_thread = Thread(target=client.receive_data)
     task_thread = Thread(target=client.handle_tasks)
@@ -279,14 +294,14 @@ def main():
 
     if name == "alice":
         time.sleep(1.5)
-        client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")
+        # client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")
         time.sleep(3)
         client.request_file_list()
         time.sleep(3)
         client.request_file("text.txt")
         time.sleep(3)
-        client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\video.mp4")
-        time.sleep(45)
+        # client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\video.mp4")
+        time.sleep(35)
         client.request_file("video.mp4")
 
 

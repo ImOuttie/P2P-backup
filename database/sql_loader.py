@@ -29,7 +29,11 @@ class SQLLoader:
 
     def check_user_password(self, user: User, password: str):
         query = "SELECT password_hash FROM user_password WHERE user_id == ?"
-        user_password = self._execute_and_fetch(query, [user.user_db_id])[0]
+        resp = self._execute_and_fetch(query, [user.user_db_id])
+        if not resp:
+            print(resp)
+            raise Exception(f"No password in database of user: {user.name}\npassword given: {password}")
+        user_password = resp[0][0]
         if password == user_password:
             return True
         return False
@@ -37,9 +41,9 @@ class SQLLoader:
     def get_user_file_key(self, user: User) -> str:
         query = "SELECT key FROM user_file_key WHERE user_id == ?"
         resp = self._execute_and_fetch(query, [user.user_db_id])
-        if resp is None:
+        if not resp:
             raise Exception(f"User file key doesn't exist: {user.name}")
-        return resp[0]
+        return resp[0][0]
 
     def add_user(self, name: str, addr: tuple, password: str, file_key: str) -> User:
         if self.check_if_user_exist_by_name(name):
@@ -49,14 +53,15 @@ class SQLLoader:
         message_id = self._insert_row(insert_message_sql, data)
         if message_id == -1:
             raise Exception(f"unable to insert user {name}")
+        user_id = message_id
 
-        insert_message_sql = "INSERT INTO user_password(password_hash) VALUES(?)"
-        message_id = self._insert_row(insert_message_sql, [password])
+        insert_message_sql = "INSERT INTO user_password(password_hash, user_id) VALUES(?, ?)"
+        message_id = self._insert_row(insert_message_sql, [password, user_id])
         if message_id == -1:
             raise Exception(f"unable to insert user password {name=}\n{password=}")
 
-        insert_message_sql = "INSERT INTO user_file_key(key) VALUES(?)"
-        message_id = self._insert_row(insert_message_sql, [file_key])
+        insert_message_sql = "INSERT INTO user_file_key(key, user_id) VALUES(?, ?)"
+        message_id = self._insert_row(insert_message_sql, [file_key, user_id])
         if message_id == -1:
             raise Exception(f"unable to insert user file key {name=}\n{file_key=}")
 
