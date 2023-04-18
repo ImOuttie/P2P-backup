@@ -29,7 +29,7 @@ class Client:
         self._server_addr = (SERVER_IP, SERVER_PORT)
         self.tasks: Deque[Tuple[tuple | None, TASK]] = deque()  # deque of (address, task)
         self.task_wait_queue: Deque[tuple[Tuple | None, TASK]] = deque()
-        self.peers: Dict[Tuple, NAME] = {}
+        self.peers: Dict[ADDRESS, NAME] = {}
         self.peer_names: Dict[NAME, Tuple] = {}
         self.files_on_server: Dict[FILE_NAME, File] = {}
         self.sum_backups_size: float = 0
@@ -40,6 +40,7 @@ class Client:
         self.server_fernet = None
         self.peer_fernets: Dict[ADDRESS, Fernet] = {}
         self.file_list_received: List[str] | None = None
+        self.peer_handshakes: Dict[ADDRESS, encryption_utils.ConnectToPeerTask] = {}
 
     def send_to_peer(self, msg: Message, addr: tuple):
         data = json.dumps(msg.to_dict()).encode()
@@ -55,13 +56,13 @@ class Client:
         self.sock.sendto(encrypted, self._server_addr)
 
     def connect_to_peer(self, msg: ConnectToPeer):
-        if msg.peer_address in self.peer_fernets:
+        if msg.peer_address in self.peers or msg.peer_address in self.peer_fernets:
             logging.debug(f"Peer in addr {msg.peer_address} is already known")
             return
         print(f"connecting to peer: {msg.peer_name} on address {msg.peer_address}")
+        a = encryption_utils.ConnectToPeerTask(msg=msg, sock=self.sock, name=self.name)
+        self.peer_handshakes[msg.peer_address] = a
         self.peer_fernets[msg.peer_address] = encryption_utils.get_fernet_from_b64(msg.fernet_key)
-        connect_msg = Connect(name=self.name)
-        self.send_to_peer(connect_msg, msg.peer_address)
 
     def remove_peer(self, address):
         try:
@@ -75,6 +76,8 @@ class Client:
         if addr in self.peers:
             logging.debug(f"Peer {msg.name} on address {addr} is already known")
             return
+        self.peer_handshakes[addr].finished = True
+        del self.peer_handshakes[addr]
         self.peers[addr] = msg.name
         self.peer_names[msg.name] = addr
 
@@ -246,6 +249,10 @@ class Client:
                     msg = encryption_utils.decrypt_fernet_to_json(self.server_fernet, data)
                     logging.debug(f"Received message from server: {msg}")
                     self.tasks.append((addr, msg))
+                elif addr in self.peers:
+                    msg = encryption_utils.decrypt_fernet_to_json(self.peer_fernets[addr], data)
+                    logging.debug(f"Received message from peer: {msg}")
+                    self.tasks.append((addr, msg))
                 elif addr in self.peer_fernets:
                     msg = encryption_utils.decrypt_fernet_to_json(self.peer_fernets[addr], data)
                     logging.debug(f"Received message from peer: {addr} msg: {msg}")
@@ -255,6 +262,8 @@ class Client:
 
             except (json.JSONDecodeError, TypeError, InvalidToken) as e:
                 print(f"Invalid data from address {addr}\ndata: {data.decode()}\n{e=}")
+                print(self.peer_fernets[addr])
+                raise e
 
 
 def main():

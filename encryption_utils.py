@@ -35,7 +35,7 @@ def generate_b64_fernet_key() -> str:
 
 
 def get_fernet_from_b64(encoded_key: str) -> Fernet:
-    return Fernet(base64.b64decode(encoded_key.encode()))
+    return Fernet(base64.b64decode(encoded_key))
 
 
 def decrypt_fernet_to_json(f: Fernet, data: bytes) -> dict:
@@ -259,22 +259,24 @@ class ConnectToPeerTask:
         self.self_name = name
         self.peer_addr = msg.peer_address
         self.peer_name = msg.peer_name
-        self.fernet = Fernet(msg.fernet_key)
+        self.fernet = get_fernet_from_b64(msg.fernet_key)
         self.sock = sock
         self.finished = False
-        self.daemon_thread = threading.Thread(target=self.run_daemon)
-        self.daemon_thread.start()
+        self._daemon_thread = threading.Thread(target=self._run_daemon)
+        self._daemon_thread.start()
+        self._daemon_interval = 0.1
 
-    def try_connect(self):
+    def _try_connect(self):
         msg = Connect(name=self.self_name).to_dict()
         ct = encrypt_with_fernet(self.fernet, json.dumps(msg).encode())
         self.sock.sendto(ct, self.peer_addr)
 
-    def run_daemon(self):
+    def _run_daemon(self):
         while True:
             if self.finished:
                 return
-            time.sleep(0.5)
+            self._try_connect()
+            time.sleep(self._daemon_interval)
 
 
 def main():
