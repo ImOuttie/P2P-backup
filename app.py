@@ -30,11 +30,15 @@ class Application:
         logging.basicConfig(level=LOGLEVEL)
         self.client = Client(name, port)
         if not LOCALHOST:
-            self.client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
+            logging.info(f"Running not on localhost, server addr: {settings.SERVER_ADDR}")
+            self.client._server_addr = settings.SERVER_ADDR
         logging.debug(f"Client {name} up and running on port {port}")
-
-        private_key = encryption_utils.load_private_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\private.pem")
-        public_key = encryption_utils.load_public_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\public.pem")
+        if name is not None:
+            private_key = encryption_utils.load_private_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\private.pem")
+            public_key = encryption_utils.load_public_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\public.pem")
+        else:
+            private_key = encryption_utils.load_private_ecdh_key(rf"{DEF_KEYS_PATH}\private.pem")
+            public_key = encryption_utils.load_public_ecdh_key(rf"{DEF_KEYS_PATH}\public.pem")
         f = encryption_utils.HandshakeWithServerTask(
             private_key=private_key, public_key=public_key, server_addr=SERVER_ADDR, sock=self.client.sock
         ).begin()
@@ -109,8 +113,6 @@ class Application:
         heading = Label(frm, text="Log-in", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 23, "bold"))
         heading.place(x=100, y=5)
 
-
-
         user = Entry(frm, width=25, fg="black", border=0, font=("Microsoft YaHei UI Light", 11))
         user.place(x=30, y=80)
         user.insert(0, def_username)
@@ -157,7 +159,7 @@ class Application:
 
         var_flag = IntVar()
         stay_in = Checkbutton(frm, width=1, height=1, cursor="hand2", bg="white", fg="#57a1f8", variable=var_flag,
-                              activebackground="white", activeforeground="white")
+                              activebackground="white", activeforeground="white", command=self.change_remember_login)
         stay_in.place(x=120, y=225)
 
         user = Entry(frm, width=25, fg="black", border=0, font=("Microsoft YaHei UI Light", 11))
@@ -301,6 +303,12 @@ class Application:
 
         Button(root, width=25, pady=7, text="Back", fg="white", bg="#57a1f8", border=0,
                command=lambda: self.regular_screen(root)).place(x=700, y=20)
+
+        if not files:
+            heading = Label(root, text="No files, you can go back and backup some!", fg="red", bg="white", font=("Microsoft YaHei UI Light", 25, "bold"))
+            heading.place(x=50, y=75)
+            return
+
         max_x = 925
         cur_y = 85
         cur_x = 30
@@ -316,6 +324,7 @@ class Application:
 
     def retrieve_file_screen(self, prev: Tk):
         files = self.get_file_list_from_server()
+
         prev.destroy()
         root = Tk()
         root.title("P2P-backup™")
@@ -334,6 +343,11 @@ class Application:
 
         def get_cmd(filename: str, window: Tk) -> Callable:
             return lambda: self.retrieve_file(filename, window)
+
+        if not files:
+            heading = Label(root, text="No files, you can go back and backup some!", fg="red", bg="white", font=("Microsoft YaHei UI Light", 25, "bold"))
+            heading.place(x=50, y=75)
+            return
 
         for file in files:
             f_button = Button(root, text=file, fg="black", bg="#57a1f8", font=("Microsoft YaHei UI Light", 15, "bold"),
@@ -377,6 +391,12 @@ def main():
     else:
         name = sys.argv[1]
         port = int(sys.argv[2])
+    if name is None:
+        p = Path(settings.KEYS_PATH) / "default"
+        if not p.is_dir():
+            os.makedirs(p)
+            encryption_utils.generate_ecdh_keys(rf"{settings.DEF_KEYS_PATH}private.pem", rf"{settings.DEF_KEYS_PATH}public.pem")
+
     app = Application()
     app.start(name=name, port=port)
 

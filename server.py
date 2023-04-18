@@ -225,10 +225,9 @@ class Server:
                     fernet = task.exchange_keys()
                     self.fernets[addr] = fernet
         except json.JSONDecodeError:
-            raise Exception(f"Improper data received from addr {addr}\n{data=}")
-        # todo: remove raises
+            logging.debug(f"Improper data received from addr {addr}\n{data=}")
         except TypeError as e:
-            raise e
+            logging.debug(f"Improper data received from addr {addr}\n{data=}\n{e=}")
 
     def handle_self(self, task: dict):
         match task["task"]:
