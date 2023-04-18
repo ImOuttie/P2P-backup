@@ -29,7 +29,7 @@ class Server:
         self.clients: Dict[ADDRESS, NAME] = {}
         self.names: Dict[NAME, ADDRESS] = {}
         self.file_names: Dict[NAME, Dict[FILENAME, UserFile]] = {}
-        self.tasks: Deque[Tuple[Tuple | None, Dict]] = deque()
+        self.tasks: Deque[Tuple[ADDRESS | None, Dict]] = deque()
         self.users: Dict[NAME, User] = {}
         self.task_wait_queue: Deque[Tuple[Tuple | None, Dict]] = deque()
         self.avg_storage = 4
@@ -52,6 +52,7 @@ class Server:
         self.names[name] = address
         self.users[name] = user
         self.send_to_client(LoginResp(ServerLoginResponse.SUCCESS), address)
+        logging.debug(f"Client {name} successfully signed in")
 
     def register_client(self, msg: Register, addr: tuple):
         if self.database.check_if_user_exist_by_name(msg.name):
@@ -65,7 +66,7 @@ class Server:
         self.users[name] = user
         self.file_names[msg.name] = {}
         self.send_to_client(RegisterResp(ServerRegisterResponse.SUCCESS), addr)
-        # todo: send file encryption key in sendfileresp or add it
+        logging.debug(f"Client {name} successfully registered")
 
     def remove_client(self, address):
         try:
@@ -100,8 +101,10 @@ class Server:
         return None
 
     def handle_file_req(self, user: User, request: SendFileReq):
+        if self.database.is_file_exist_by_name(user, request.file_name):
+            return
         availables = self.find_location_for_data(user.name)
-        if not availables:
+        if availables is None:
             self.task_wait_queue.append((None, {"task": "find_location_for_data", "client": user, "msg": request}))
             return
         file = self.add_file_to_db(user, request, availables)
@@ -140,22 +143,32 @@ class Server:
             return
         dicts = []
         count = 0
+        clients_needing_connection = []
         for stripe in file.stripes:
             # TODO: CHECK IF CLIENT IS AVAILABLE
-            self.create_connection(self.names[stripe.location], addr)
+            client_name = stripe.location
+            if client_name not in self.users:
+                continue
+            client_user = self.users[client_name]
+            clients_needing_connection.append(client_user)
             dicts.append(
                 {
                     "id": stripe.id,
                     "is_parity": stripe.is_parity,
                     "is_first": stripe.is_first,
-                    "peer": stripe.location,
-                    "addr": self.names[stripe.location],
+                    "peer": client_user.name,
+                    "addr": client_user.current_addr,
                     "hash": stripe.hash,
                 }
             )
             count += 1
             if count == 2:
                 break
+        if count != 2:
+            self.task_wait_queue.append((None, {"task": "handle_file_request", "user": user, "msg": req}))
+            return
+        for user in clients_needing_connection:
+            self.create_connection(user.current_addr, addr)
         self.send_to_client(GetFileResp(file_name=req.file_name, stripes=dicts, nonce=file.nonce), addr)
 
     def add_file_to_db(self, owner: User, msg: SendFileReq, availables: List[User]) -> UserFile:
@@ -213,6 +226,8 @@ class Server:
                 self.handle_file_req(user=self.users[task["client"]], request=task["msg"])
             case "authenticate":
                 pass
+            case "handle_file_request":
+                self.handle_file_request(req=task["msg"], addr=task["user"].current_addr)
 
     def handle_client(self, client_addr, msg: dict):
         match msg["cmd"]:
@@ -229,7 +244,8 @@ class Server:
                 return
             case "get_file_key":
                 self.handle_get_file_key(GetFileKey.from_dict(msg), client_addr)
-        logging.debug(f"Message contained invalid command: {msg}")
+            case _:
+                logging.debug(f"Message contained invalid command: {msg}")
 
     def handle_tasks(self):
         while True:

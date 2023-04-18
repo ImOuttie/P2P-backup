@@ -1,6 +1,7 @@
 import json
 import os.path
 import socket
+import time
 from collections import deque
 from threading import Thread
 from typing import Deque
@@ -36,9 +37,9 @@ class Client:
         self.recv_file_handlers: Dict[FILE_NAME, RecvFileHandler] = {}
         self.stripe_to_filename: Dict[STRIPE_ID, FILE_NAME] = {}
         self.chacha_key = chacha_key
-        self.nonces: Dict[FILE_NAME, bytes] = {}
         self.server_fernet = None
         self.peer_fernets: Dict[ADDRESS, Fernet] = {}
+        self.file_list_received: List[str] | None = None
 
     def send_to_peer(self, msg: Message, addr: tuple):
         data = json.dumps(msg.to_dict()).encode()
@@ -138,14 +139,23 @@ class Client:
     def request_file_list(self):
         self.send_to_server(GetFileList())
 
-    @staticmethod
-    def handle_file_list_resp(resp: FileListResp):
+    def get_file_list(self) -> List[str]:
+        self.request_file_list()
+        while True:
+            time.sleep(0.1)
+            files = self.file_list_received
+            if files is not None:
+                self.file_list_received = None
+                return files
+
+    def handle_file_list_resp(self, resp: FileListResp):
+        self.file_list_received = resp.files
         print(f"files on server: {resp.files}")
 
     def request_file(self, filename: str):
         if self.chacha_key is None:
             self.send_to_server(GetFileKey())
-            self.tasks.append((None, {"task": "request_file", "file_name": filename}))
+            self.task_wait_queue.append((None, {"task": "request_file", "file_name": filename}))
             return
         self.send_to_server(GetFileReq(file_name=filename))
 

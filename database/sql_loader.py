@@ -70,11 +70,19 @@ class SQLLoader:
         return user
 
     def check_if_user_exist_by_name(self, name: str) -> bool:
-        query = "SELECT * FROM user_info where name == ?"
+        query = "SELECT * FROM user_info WHERE name == ?"
         user = self._execute_and_fetch(query, [name])
         if not user:
             return False
         return True
+
+    def is_file_exist_by_name(self, user: User, filename: str):
+        query = "SELECT * FROM user_file WHERE user_id == ? AND name == ?"
+        resp = self._execute_and_fetch(query, [user.user_db_id, filename])
+        if not resp:
+            return False
+        return True
+
 
     def add_file(
         self, filename: str, file_hash: str, file_len: int, nonce: str, user: User, user_file_stripes: List[protocol.GetFileRespStripe]

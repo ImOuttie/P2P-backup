@@ -182,7 +182,7 @@ class LoginToServerTask:
         self.sock = sock
         self.fernet = fernet
 
-    def begin(self):
+    def begin(self) -> protocol.ServerLoginResponse | None:
         self.send_login_msg()
         while True:
             data, addr = self.sock.recvfrom(1024)
@@ -195,12 +195,14 @@ class LoginToServerTask:
                     msg = protocol.LoginResp.from_dict(msg)
                     if msg.resp == protocol.ServerLoginResponse.SUCCESS:
                         logging.debug("Successful Login")
-                        return
-                    # TODO: handle these
                     elif msg.resp == protocol.ServerLoginResponse.INCORRECT_PASSWORD:
                         logging.debug("incorrect password")
                     elif msg.resp == protocol.ServerLoginResponse.NAME_INVALID:
                         logging.debug("invalid name")
+                    else:
+                        logging.debug(f"invalid data: {msg.resp}")
+                        return None
+                    return msg.resp
             except (json.JSONDecodeError, ValueError):
                 raise Exception(f"bad data: {data}")
 
@@ -219,7 +221,7 @@ class RegisterToServerTask:
         self.fernet = fernet
         self._server_addr = settings.SERVER_ADDR
 
-    def begin(self):
+    def begin(self) -> protocol.ServerRegisterResponse | None:
         self.send_register_msg()
         while True:
             data, addr = self.sock.recvfrom(1024)
@@ -230,10 +232,13 @@ class RegisterToServerTask:
                 if msg["cmd"] == "register_resp":
                     msg = protocol.RegisterResp.from_dict(msg)
                     if msg.resp == protocol.ServerRegisterResponse.SUCCESS:
-                        return
-                    # TODO: handle this
+                        logging.debug("Successful Register")
                     elif msg.resp == protocol.ServerRegisterResponse.NAME_TAKEN:
-                        logging.exception("name taken")
+                        logging.exception("Name taken")
+                    else:
+                        logging.debug(f"invalid data: {msg.resp}")
+                        return None
+                    return msg.resp
             except (json.JSONDecodeError, ValueError):
                 raise Exception(f"bad data: {data}")
 
@@ -254,7 +259,7 @@ class ConnectToPeerTask:
         self.self_name = name
         self.peer_addr = msg.peer_address
         self.peer_name = msg.peer_name
-        self.fernet = Fernet(msg.key)
+        self.fernet = Fernet(msg.fernet_key)
         self.sock = sock
         self.finished = False
         self.daemon_thread = threading.Thread(target=self.run_daemon)
