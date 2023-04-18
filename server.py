@@ -102,12 +102,16 @@ class Server:
 
     def handle_file_req(self, user: User, request: SendFileReq):
         if self.database.is_file_exist_by_name(user, request.file_name):
+            logging.debug(f"Client {user.name} tried to backup file that is already backed up or has the same name: {request.file_name}")
             return
         availables = self.find_location_for_data(user.name)
         if availables is None:
             self.task_wait_queue.append((None, {"task": "find_location_for_data", "client": user, "msg": request}))
             return
         file = self.add_file_to_db(user, request, availables)
+        if file is None:
+            logging.debug(f"Couldn't backup file {request.file_name} from client {user.name}, perhaps because of its size.")
+            return
         self.send_addrs_to_client(user, availables, file)
 
     def find_location_for_data(self, owner: str) -> List[User] | None:
@@ -171,7 +175,13 @@ class Server:
             self.create_connection(user.current_addr, addr)
         self.send_to_client(GetFileResp(file_name=req.file_name, stripes=dicts, nonce=file.nonce), addr)
 
-    def add_file_to_db(self, owner: User, msg: SendFileReq, availables: List[User]) -> UserFile:
+    def add_file_to_db(self, owner: User, msg: SendFileReq, availables: List[User]) -> UserFile | None:
+        as_gb = gb_from_amount__bytes(msg.size)
+        if owner.storing_gb + as_gb > self.avg_storage:
+            logging.debug(f"Client {owner.name} tried to backup file too large for their remaining capacity\n"
+                          f"{msg.file_name}\n{msg.size}")
+            return None
+
         file_stripes: List[GetFileRespStripe] = []
         for file_stripe, user in zip(msg.stripes, availables):
             stripe = {

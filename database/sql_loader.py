@@ -2,6 +2,7 @@ import os
 import sqlite3
 from pathlib import Path
 import protocol
+import utils
 from database.database_creator import DatabaseCreator
 from server_dataclasses import User, UserFile, FileStripe
 from typing import List, Iterable
@@ -83,7 +84,6 @@ class SQLLoader:
             return False
         return True
 
-
     def add_file(
         self, filename: str, file_hash: str, file_len: int, nonce: str, user: User, user_file_stripes: List[protocol.GetFileRespStripe]
     ) -> UserFile:
@@ -108,8 +108,17 @@ class SQLLoader:
             user_file.stripes.append(stripe)
 
         user.owned_files.append(user_file)
+        new_storing_gb = user.storing_gb + utils.gb_from_amount__bytes(file_len)
+        self._update_user_storing_gb(user, new_storing_gb)
         print(f"add_file {message_id=}")
         return user_file
+
+    def _update_user_storing_gb(self, user: User, new_storing_gb: float):
+        insert_message_sql = f"UPDATE user_info SET storing_gb = ? WHERE user_id == ?"
+        message_id = self._update_row(insert_message_sql, [new_storing_gb, user.user_db_id])
+        if message_id == -1:
+            raise Exception("unable to update user storing_gb file")
+        user.user_db_id = new_storing_gb
 
     def _insert_file_stripe(self, file_stripe: protocol.GetFileRespStripe, file_db_id: int):
         insert_message_sql = (
@@ -177,6 +186,21 @@ class SQLLoader:
         self.mutex.release()
         return data
 
+    def _update_row(self, update_sql: str, data: Iterable):
+        try:
+            self.mutex.acquire()
+            c = self.conn.cursor().execute(update_sql, data)
+            self.conn.commit()
+        except Exception as e:
+            print(f"Exception while trying to open the database:\n{e}")
+            self.mutex.release()
+            return -1
+
+        ret = c.lastrowid
+        self.mutex.release()
+        print(f"update_row last id: {ret}")
+        return ret
+
     def _insert_row(self, insert_sql: str, data: Iterable) -> int | None:
         try:
             self.mutex.acquire()
@@ -229,14 +253,14 @@ if __name__ == "__main__":
     is_first3 = True
     id3 = "stripe1"
 
-    user_file_stripes: List[protocol.GetFileRespStripe] = [
+    user_file_stripes1: List[protocol.GetFileRespStripe] = [
         {"id": id1, "hash": hash1, "peer": peer_name, "addr": (), "is_first": is_first1, "is_parity": is_parity1},
         {"id": id2, "hash": hash2, "peer": peer_name, "addr": (), "is_first": is_first2, "is_parity": is_parity2},
         {"id": id3, "hash": hash3, "peer": peer_name, "addr": (), "is_first": is_first3, "is_parity": is_parity3},
     ]
 
     sql.add_file(
-        filename="file1", file_hash="filehash", file_len=126, nonce=str(os.urandom(16)), user=user1, user_file_stripes=user_file_stripes
+        filename="file1", file_hash="filehash", file_len=126, nonce=str(os.urandom(16)), user=user1, user_file_stripes=user_file_stripes1
     )
 
     result_user = sql.load_user_data("poncho", ())

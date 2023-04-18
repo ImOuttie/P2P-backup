@@ -21,7 +21,9 @@ RESTORE_STRIPE_FINISHED_PATH = r"temp\for_restore_finished\\"
 TEMP_PEER_STRIPE_PATH = r"temp\not_final\\"
 CLIENT_KEYS_PATH = r"keys\client_keys\\"
 DB_PATH = r".\database\server.db"
+LOGIN_INFO_PATH = r"login_info\\"
 
+GET_LOGIN_INFO = True
 RESTART_DB = False
 SEND_DELAY = 0.01
 MAX_DATA_SIZE = 600

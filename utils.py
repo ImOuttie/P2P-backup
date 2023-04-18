@@ -1,5 +1,9 @@
 import os
+from pathlib import Path
+
 from Crypto.Cipher import ChaCha20
+
+import settings
 from settings import *
 from typing import Tuple, List
 import uuid
@@ -7,6 +11,10 @@ from hashlib import md5
 from client_dataclasses import File, FileStripe
 from server_dataclasses import UserFile
 import base64
+
+
+USERNAME = str
+PASSWORD = str
 
 
 def get_unique_id() -> str:
@@ -189,3 +197,56 @@ def decrypt_file_data(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
     """Decrypts ChaCha20 ciphertext. The nonce which was used for encryption is required."""
     cipher = ChaCha20.new(key=key, nonce=nonce)
     return cipher.decrypt(ciphertext)
+
+
+def store_login_information(username: str, password: str, in_multi_user=False):
+    """Stores login information in login info folder."""
+    try:
+        path = Path(settings.LOGIN_INFO_PATH)
+        if in_multi_user:
+            path = path / "multiuser" / username
+            if not path.is_dir():
+                os.makedirs(path)
+            path /= "info.txt"
+        else:
+            path = path / "default.txt"
+        with open(path, 'w') as f:
+            data = f"{username}\n{password}"
+            f.write(data)
+
+    except Exception as e:
+        print(f"Couldn't store login information\n{username=}\n{password=}\n{e=}")
+        raise e
+
+
+def get_login_information(username: str = None) -> Tuple[USERNAME, PASSWORD] | None:
+    """Gets user information from login info folder. If not found, returns None."""
+    if username is None:
+        try:
+            path = Path(LOGIN_INFO_PATH) / "default.txt"
+            if not path.is_file():
+                return None
+            with open (path, "r") as f:
+                username = f.readline()
+                password = f.readline()
+                return username, password
+        except Exception as e:
+            print(f"Couldn't get login information for default path\n{e=}")
+        return None
+    try:
+        path = Path(LOGIN_INFO_PATH) / "multiuser" / username / "info.txt"
+        if not path.is_file():
+            return None
+        with open(path, "r") as f:
+            username = f.readline()
+            password = f.readline()
+            return username, password
+    except Exception as e:
+        print(f"Couldn't get login information for default path\n{e=}")
+    return None
+
+
+def gb_from_amount__bytes(amount_bytes: int) -> float:
+    """Returns size in GB from an amount of bytes."""
+    return amount_bytes / (1024 * 1024 * 1024)
+

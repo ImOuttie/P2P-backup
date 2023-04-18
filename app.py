@@ -9,6 +9,8 @@ from typing import List, Callable, Any
 
 import encryption_utils
 import protocol
+import settings
+import utils
 from client import Client
 from settings import *
 
@@ -18,6 +20,11 @@ class Application:
         self.client = None
         self.root_on = False
         self.root = Tk()
+        self.remember_login = False
+
+    def change_remember_login(self):
+        self.remember_login = not self.remember_login
+        logging.debug(f"Remember login: {self.remember_login}")
 
     def start(self, name: str, port: int):
         logging.basicConfig(level=LOGLEVEL)
@@ -82,25 +89,36 @@ class Application:
             else:
                 raise Exception(f"Unknown login response: {bad_resp}")
 
-        heading = Label(frm, text="Log-in", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 23, "bold"))
-        heading.place(x=100, y=5)
-
         label2 = Label(frm, text="Remember me?", fg="black", bg="white", font=("Microsoft YaHei UI Light", 9))
         label2.place(x=25, y=225)
 
         var_flag = IntVar()
         stay_in = Checkbutton(frm, width=1, height=1, cursor="hand2", bg="white", fg="#57a1f8", variable=var_flag,
-                              activebackground="white", activeforeground="white")
+                              command=self.change_remember_login, activebackground="white", activeforeground="white")
         stay_in.place(x=120, y=225)
+
+        def_username, def_password = "username", "password"
+        if settings.GET_LOGIN_INFO:
+            x = utils.get_login_information(self.client.name)
+            if x is not None:
+                def_username, def_password = x
+                def_username = def_username.strip()
+                var_flag.set(1)
+                self.change_remember_login()
+
+        heading = Label(frm, text="Log-in", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 23, "bold"))
+        heading.place(x=100, y=5)
+
+
 
         user = Entry(frm, width=25, fg="black", border=0, font=("Microsoft YaHei UI Light", 11))
         user.place(x=30, y=80)
-        user.insert(0, "username")
+        user.insert(0, def_username)
         Frame(frm, width=295, height=2, bg="black").place(x=25, y=107)
 
         passcode = Entry(frm, width=25, fg="black", border=0, font=("Microsoft YaHei UI Light", 11), show="*")
         passcode.place(x=30, y=150)
-        passcode.insert(0, "password")
+        passcode.insert(0, def_password)
         Frame(frm, width=295, height=2, bg="black").place(x=25, y=177)
 
         Button(frm, width=39, pady=7, text="Log-in", fg="white", bg="#57a1f8", border=0,
@@ -181,6 +199,8 @@ class Application:
         )
         resp = login_task.begin()
         if resp == protocol.ServerLoginResponse.SUCCESS:
+            utils.store_login_information(username, password, self.client.name is not None)
+            self.client.name = username
             self.start_client()
             self.regular_screen(prev)
         elif resp == protocol.ServerLoginResponse.NAME_INVALID:
@@ -202,6 +222,8 @@ class Application:
         )
         resp = register_task.begin()
         if resp == protocol.ServerRegisterResponse.SUCCESS:
+            self.client.name = username
+            self.start_client()
             self.regular_screen(prev)
         elif resp == protocol.ServerRegisterResponse.NAME_TAKEN:
             self.register_screen(prev=prev, bad_resp=resp)
@@ -349,13 +371,14 @@ class Application:
 
 
 def main():
-    name = "alice"
-    port = 30001
-    # name = sys.argv[1]
-    # port = int(sys.argv[2])
+    if len(sys.argv) < 3:
+        name = None
+        port = 30001
+    else:
+        name = sys.argv[1]
+        port = int(sys.argv[2])
     app = Application()
     app.start(name=name, port=port)
-
 
 
 if __name__ == '__main__':
