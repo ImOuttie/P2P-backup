@@ -27,6 +27,11 @@ def get_hash(data: bytes) -> str:
     return md5(data).digest().hex()
 
 
+def fragment_data(data: bytes) -> Tuple[bytes, bytes]:
+    """Returns tuple of (even_bytes, uneven_bytes)."""
+    return data[::2], data[1::2]
+
+
 def get_parity(data1: bytes, *other_data: bytes) -> bytes:
     """Returns the result of the repeated xor operation on all given (separate) data stripes."""
     length = len(data1)
@@ -37,11 +42,6 @@ def get_parity(data1: bytes, *other_data: bytes) -> bytes:
         data = int.from_bytes(data, BYTEORDER)
         p = p ^ data
     return p.to_bytes(length, BYTEORDER)
-
-
-def fragment_data(data: bytes) -> Tuple[bytes, bytes]:
-    """Returns tuple of (even_bytes, uneven_bytes)."""
-    return data[::2], data[1::2]
 
 
 def defragment_data(data1: bytes, data2: bytes) -> bytes:

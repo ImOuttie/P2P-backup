@@ -4,7 +4,7 @@ from pathlib import Path
 import protocol
 import utils
 from database.database_creator import DatabaseCreator
-from server_dataclasses import User, UserFile, FileStripe
+from server_dataclasses import User, UserFile, UserFileStripe
 from typing import List, Iterable
 from threading import Lock
 
@@ -96,7 +96,7 @@ class SQLLoader:
         user_file = UserFile(owner=user.name, name=filename, hash=file_hash, len=file_len, nonce=nonce)
         for file_stripe in user_file_stripes:
             stripe_db_id = self._insert_file_stripe(file_stripe, file_db_id)
-            stripe = FileStripe(
+            stripe = UserFileStripe(
                 hash=file_stripe["hash"],
                 is_parity=file_stripe["is_parity"],
                 is_first=file_stripe["is_first"],
@@ -151,7 +151,7 @@ class SQLLoader:
             query = "SELECT * FROM file_stripe WHERE file_id == ?"
             stripe_info = self._execute_and_fetch(query, [user_file.file_db_id])
             for stripe_row in stripe_info:
-                file_stripe = FileStripe(
+                file_stripe = UserFileStripe(
                     stripe_db_id=stripe_row[0],
                     id=stripe_row[1],
                     hash=stripe_row[2],

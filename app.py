@@ -1,11 +1,10 @@
 import logging
 import os
 import threading
-import time
 from pathlib import Path
 from tkinter import *
 from tkinter import filedialog
-from typing import List, Callable, Any
+from typing import List, Callable
 
 import encryption_utils
 import protocol

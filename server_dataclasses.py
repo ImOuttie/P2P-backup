@@ -5,7 +5,7 @@ STRIPE_ID = str
 
 
 @dataclass(slots=True)
-class FileStripe:
+class UserFileStripe:
     hash: str
     is_parity: bool
     is_first: bool
@@ -23,7 +23,7 @@ class UserFile:
     len: int
     nonce: str
     file_db_id: int = -1
-    stripes: List[FileStripe] = field(default_factory=list)
+    stripes: List[UserFileStripe] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -33,4 +33,4 @@ class User:
     storing_gb: float = 0
     user_db_id: int = -1
     owned_files: List[UserFile] = field(default_factory=list)
-    stripes_saved: Dict[STRIPE_ID, FileStripe] = field(default_factory=dict)
+    stripes_saved: Dict[STRIPE_ID, UserFileStripe] = field(default_factory=dict)

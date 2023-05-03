@@ -1,7 +1,7 @@
 import encryption_utils
 from utils import *
 
-from server_dataclasses import UserFile, FileStripe, User
+from server_dataclasses import UserFile, UserFileStripe, User
 from protocol import *
 from settings import *
 import json
