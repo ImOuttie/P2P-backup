@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from Crypto.Cipher import ChaCha20
+from Crypto.Cipher import ChaCha20_Poly1305
 
 import settings
 from settings import *
@@ -189,13 +189,13 @@ def get_chacha_key() -> bytes:
 
 def encrypt_file_data(plaintext: bytes, key: bytes) -> Tuple[bytes, bytes]:
     """Encrypts plaintext using the ChaCha20 algorithm. Returns nonce which is required for decrypting the file."""
-    cipher = ChaCha20.new(key=key)
+    cipher = ChaCha20_Poly1305.new(key=key)
     return cipher.encrypt(plaintext), cipher.nonce
 
 
 def decrypt_file_data(ciphertext: bytes, key: bytes, nonce: bytes) -> bytes:
     """Decrypts ChaCha20 ciphertext. The nonce which was used for encryption is required."""
-    cipher = ChaCha20.new(key=key, nonce=nonce)
+    cipher = ChaCha20_Poly1305.new(key=key, nonce=nonce)
     return cipher.decrypt(ciphertext)
 
 

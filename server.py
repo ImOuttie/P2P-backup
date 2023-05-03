@@ -232,7 +232,7 @@ class Server:
     def handle_self(self, task: dict):
         match task["task"]:
             case "find_location_for_data":
-                self.handle_file_req(user=self.users[task["client"]], request=task["msg"])
+                self.handle_file_req(user=task["client"], request=task["msg"])
             case "authenticate":
                 pass
             case "handle_file_request":

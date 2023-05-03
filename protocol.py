@@ -42,8 +42,9 @@ T = TypeVar("T", bound="Parent")
 class Message:
     """
     Baseclass for protocol message, every message class must contain:
+    __init__() method for manual initialization. 
     to_dict() method so it can be passed to JSON.
-    from_dict() method so the message can be easily initialized.
+    from_dict() method so the message can be easily initialized from a dict.
     """
 
     def to_dict(self) -> dict:
@@ -52,68 +53,6 @@ class Message:
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
         raise NotImplementedError
-
-
-class RegisterResp(Message):
-    def __init__(self, resp: ServerRegisterResponse):
-        self._cmd = "register_resp"
-        self.resp = resp
-
-    def to_dict(self) -> dict:
-        return {
-            "cmd": self._cmd,
-            "resp": self.resp,
-        }
-
-    @classmethod
-    def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls(resp=as_dict["resp"])
-
-
-class GetFileKey(Message):
-    def __init__(self):
-        self._cmd = "get_file_key"
-
-    def to_dict(self) -> dict:
-        return {
-            "cmd": self._cmd,
-        }
-
-    @classmethod
-    def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls()
-
-
-class GetFileKeyResp(Message):
-    def __init__(self, key: str):
-        self._cmd = "get_file_key_resp"
-        self.key = key
-
-    def to_dict(self) -> dict:
-        return {
-            "cmd": self._cmd,
-            "key": self.key,
-        }
-
-    @classmethod
-    def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls(key=as_dict["key"])
-
-
-class LoginResp(Message):
-    def __init__(self, resp: ServerLoginResponse):
-        self._cmd = "login_resp"
-        self.resp = resp
-
-    def to_dict(self) -> dict:
-        return {
-            "cmd": self._cmd,
-            "resp": self.resp,
-        }
-
-    @classmethod
-    def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls(resp=as_dict["resp"])
 
 
 class SendPublicKey(Message):
@@ -156,6 +95,22 @@ class Register(Message):
         )
 
 
+class RegisterResp(Message):
+    def __init__(self, resp: ServerRegisterResponse):
+        self._cmd = "register_resp"
+        self.resp = resp
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "resp": self.resp,
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(resp=as_dict["resp"])
+
+
 class Login(Message):
     def __init__(self, name: str, password_hash: str):
         self._cmd = "login"
@@ -174,20 +129,20 @@ class Login(Message):
         return cls(name=as_dict["name"], password_hash=as_dict["password"])
 
 
-class Connect(Message):
-    def __init__(self, name: str):
-        self._cmd = "connect"
-        self.name = name
+class LoginResp(Message):
+    def __init__(self, resp: ServerLoginResponse):
+        self._cmd = "login_resp"
+        self.resp = resp
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
-            "name": self.name,
+            "resp": self.resp,
         }
 
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls(name=as_dict["name"])
+        return cls(resp=as_dict["resp"])
 
 
 class ConnectToPeer(Message):
@@ -214,22 +169,20 @@ class ConnectToPeer(Message):
         )
 
 
-class ReceivedConnection(Message):
-    def __init__(self, name: str, accept: bool):
-        self._cmd = "received_connection"
+class Connect(Message):
+    def __init__(self, name: str):
+        self._cmd = "connect"
         self.name = name
-        self.accept = accept
 
     def to_dict(self) -> dict:
         return {
             "cmd": self._cmd,
             "name": self.name,
-            "accept": self.accept,
         }
 
     @classmethod
     def from_dict(cls: Type[T], as_dict: dict) -> T:
-        return cls(name=as_dict["name"], accept=as_dict["accept"])
+        return cls(name=as_dict["name"])
 
 
 class SendFileReq(Message):
@@ -396,6 +349,36 @@ class GetFileResp(Message):
             nonce=as_dict["nonce"],
             stripes=as_dict["stripes"],
         )
+
+
+class GetFileKey(Message):
+    def __init__(self):
+        self._cmd = "get_file_key"
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls()
+
+
+class GetFileKeyResp(Message):
+    def __init__(self, key: str):
+        self._cmd = "get_file_key_resp"
+        self.key = key
+
+    def to_dict(self) -> dict:
+        return {
+            "cmd": self._cmd,
+            "key": self.key,
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], as_dict: dict) -> T:
+        return cls(key=as_dict["key"])
 
 
 class GetStripe(Message):

@@ -3,14 +3,6 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 
 
-def return_false() -> bool:
-    return False
-
-
-def return_negative_one() -> int:
-    return -1
-
-
 @dataclass(slots=True)
 class FileStripe:
     id: str
@@ -38,9 +30,9 @@ class TempStripe:
     is_parity: bool
     parent_file: str
     is_first: bool
+    cur_seq: int = - 1  # init sequence
+    complete: bool = False
     max_seq: int = field(default_factory=int)
-    cur_seq: int = field(default_factory=return_negative_one)  # init sequence
-    complete: bool = field(default_factory=return_false)
 
 
 @dataclass(slots=True)

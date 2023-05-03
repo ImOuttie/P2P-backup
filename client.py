@@ -269,7 +269,7 @@ class Client:
 def main():
     logging.basicConfig(level=LOGLEVEL)
     if len(sys.argv) < 3:
-        name = "Omri"
+        name = None
         port = 30000
     else:
         name = sys.argv[1]
@@ -288,23 +288,27 @@ def main():
     client.server_fernet = f
     password = "lalalolo"
     hashed_password = encryption_utils.hash_password(password)
-    # register_task = encryption_utils.RegisterToServerTask(
-    #     name=client.name,
-    #     password_hash=hashed_password,
-    #     sock=client.sock,
-    #     file_encryption_key=client.chacha_key,
-    #     fernet=client.server_fernet,
-    # )
-    #
-    # register_task.begin()
 
-    login_task = encryption_utils.LoginToServerTask(
-        name=client.name,
-        password_hash=hashed_password,
-        sock=client.sock,
-        fernet=client.server_fernet,
-    )
-    login_task.begin()
+    if RESTART_DB:
+        chacha_key = utils.get_chacha_key()
+        client.chacha_key = chacha_key
+        register_task = encryption_utils.RegisterToServerTask(
+            name=client.name,
+            password_hash=hashed_password,
+            sock=client.sock,
+            file_encryption_key=client.chacha_key,
+            fernet=client.server_fernet,
+        )
+
+        register_task.begin()
+    else:
+        login_task = encryption_utils.LoginToServerTask(
+            name=client.name,
+            password_hash=hashed_password,
+            sock=client.sock,
+            fernet=client.server_fernet,
+        )
+        login_task.begin()
 
     receive_thread = Thread(target=client.receive_data)
     task_thread = Thread(target=client.handle_tasks)
