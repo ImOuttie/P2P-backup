@@ -7,7 +7,7 @@ from threading import Thread
 from typing import Deque
 from utils import *
 from math import ceil
-from TaskHandler import *
+from task_handler import *
 import encryption_utils
 from cryptography.fernet import Fernet, InvalidToken
 
