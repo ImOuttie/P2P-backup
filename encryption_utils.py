@@ -3,6 +3,7 @@ import json
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import Tuple
 
 from cryptography.fernet import Fernet
@@ -20,6 +21,7 @@ from socket import socket
 
 CURVE = ec.SECP256R1()
 ADDRESS = Tuple[str, int]
+PATH = Path | str
 
 
 def hash_password(password: str) -> str:
@@ -58,7 +60,7 @@ def serialize_private_key(key: EllipticCurvePrivateKey) -> bytes:
     )
 
 
-def generate_ecdh_keys(path_private: str, path_public: str) -> Tuple[EllipticCurvePrivateKey, EllipticCurvePublicKey]:
+def generate_ecdh_keys(path_private: PATH, path_public: PATH) -> Tuple[EllipticCurvePrivateKey, EllipticCurvePublicKey]:
     with open(path_private, "wb") as f:
         private_key = ec.generate_private_key(CURVE)
         serialized_private = serialize_private_key(private_key)
@@ -70,7 +72,7 @@ def generate_ecdh_keys(path_private: str, path_public: str) -> Tuple[EllipticCur
     return private_key, public_key
 
 
-def load_public_ecdh_key(path: str) -> EllipticCurvePublicKey:
+def load_public_ecdh_key(path: PATH) -> EllipticCurvePublicKey:
     with open(path, "rb") as f:
         loaded_public_key = serialization.load_pem_public_key(
             f.read(),
@@ -78,11 +80,10 @@ def load_public_ecdh_key(path: str) -> EllipticCurvePublicKey:
         return loaded_public_key
 
 
-def load_private_ecdh_key(path: str) -> EllipticCurvePrivateKey:
+def load_private_ecdh_key(path: PATH) -> EllipticCurvePrivateKey:
     with open(path, "rb") as f:
         loaded_private_key = serialization.load_pem_private_key(
             f.read(),
-            # or password=None, if in plain text
             password=None,
         )
         return loaded_private_key
@@ -244,12 +245,6 @@ class RegisterToServerTask:
         register_msg = Register(name=self.name, key=utils.encode_for_json(self.key), password_hash=self.password_hash)
         data = encrypt_with_fernet(self.fernet, json.dumps(register_msg.to_dict()).encode())
         self.sock.sendto(data, self._server_addr)
-
-
-class AuthenticateServerTask:
-    def __init__(self, path_private: str, path_public: str, name: str):
-        self.private_key, self.public_key = generate_ecdh_keys(path_private, path_public)
-        self.name = name
 
 
 class ConnectToPeerTask:

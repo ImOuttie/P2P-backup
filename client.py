@@ -273,14 +273,17 @@ def main():
     else:
         name = sys.argv[1]
         port = int(sys.argv[2])
-    # TODO: save chacha_key
     client = Client(name, port)
     if not LOCALHOST:
         client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")
 
-    private_key = encryption_utils.load_private_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\private.pem")
-    public_key = encryption_utils.load_public_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\public.pem")
+    path_private = rf"{CLIENT_KEYS_PATH}{name}\private.pem"
+    path_public = rf"{CLIENT_KEYS_PATH}{name}\public.pem"
+    private_key, public_key = encryption_utils.generate_ecdh_keys(path_private=path_private, path_public=path_public)
+
+    # private_key = encryption_utils.load_private_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\private.pem")
+    # public_key = encryption_utils.load_public_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\public.pem")
     f = encryption_utils.HandshakeWithServerTask(
         private_key=private_key, public_key=public_key, server_addr=SERVER_ADDR, sock=client.sock
     ).begin()
@@ -316,13 +319,11 @@ def main():
 
     if name == "alice":
         time.sleep(1.5)
-        # client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\text.txt")
         time.sleep(3)
         client.request_file_list()
         time.sleep(3)
         client.request_file("text.txt")
         time.sleep(3)
-        # client.req_send_file(r"C:\Cyber\Projects\P2P-backup\for_testing\video.mp4")
         time.sleep(35)
         client.request_file("video.mp4")
 

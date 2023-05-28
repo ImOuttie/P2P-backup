@@ -391,10 +391,13 @@ def main():
         name = sys.argv[1]
         port = int(sys.argv[2])
     if name is None:
-        p = Path(settings.KEYS_PATH) / "default"
+        p = Path(settings.DEF_KEYS_PATH)
         if not p.is_dir():
             os.makedirs(p)
-            encryption_utils.generate_ecdh_keys(rf"{settings.DEF_KEYS_PATH}private.pem", rf"{settings.DEF_KEYS_PATH}public.pem")
+        encryption_utils.generate_ecdh_keys(p / "private.pem", p / "public.pem")
+    else:
+        p = Path(settings.KEYS_PATH) / name
+        encryption_utils.generate_ecdh_keys(p / "private.pem", p / "public.pem")
 
     app = Application()
     app.start(name=name, port=port)
