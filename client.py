@@ -264,7 +264,7 @@ class Client:
 
 def main():
     logging.basicConfig(level=LOGLEVEL)
-    assert len(sys.argv) > 3
+    assert len(sys.argv) > 2
     name = sys.argv[1]
     port = int(sys.argv[2])
 
@@ -310,16 +310,6 @@ def main():
     task_thread = Thread(target=client.handle_tasks)
     receive_thread.start()
     task_thread.start()
-
-    if name == "alice":
-        time.sleep(1.5)
-        time.sleep(3)
-        client.request_file_list()
-        time.sleep(3)
-        client.request_file("text.txt")
-        time.sleep(3)
-        time.sleep(35)
-        client.request_file("video.mp4")
 
 
 if __name__ == "__main__":
