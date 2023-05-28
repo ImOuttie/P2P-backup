@@ -210,7 +210,7 @@ def store_login_information(username: str, password: str, in_multi_user=False):
             path /= "info.txt"
         else:
             path = path / "default.txt"
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             data = f"{username}\n{password}"
             f.write(data)
 
@@ -226,7 +226,7 @@ def get_login_information(username: str = None) -> Tuple[USERNAME, PASSWORD] | N
             path = Path(LOGIN_INFO_PATH) / "default.txt"
             if not path.is_file():
                 return None
-            with open (path, "r") as f:
+            with open(path, "r") as f:
                 username = f.readline()
                 password = f.readline()
                 return username, password
@@ -249,4 +249,3 @@ def get_login_information(username: str = None) -> Tuple[USERNAME, PASSWORD] | N
 def gb_from_amount__bytes(amount_bytes: int) -> float:
     """Returns size in GB from an amount of bytes."""
     return amount_bytes / (1024 * 1024 * 1024)
-

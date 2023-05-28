@@ -178,8 +178,7 @@ class Server:
     def add_file_to_db(self, owner: User, msg: SendFileReq, availables: List[User]) -> UserFile | None:
         as_gb = gb_from_amount__bytes(msg.size)
         if owner.storing_gb + as_gb > self.avg_storage:
-            logging.debug(f"Client {owner.name} tried to backup file too large for their remaining capacity\n"
-                          f"{msg.file_name}\n{msg.size}")
+            logging.debug(f"Client {owner.name} tried to backup file too large for their remaining capacity\n" f"{msg.file_name}\n{msg.size}")
             return None
 
         file_stripes: List[GetFileRespStripe] = []

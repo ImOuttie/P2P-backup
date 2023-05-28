@@ -51,23 +51,28 @@ class Application:
         self.root.geometry("925x500+200+300")
         self.root.config(background="white")
 
-        register_button = Button(self.root,
-                                 text="Register",
-                                 width=25,
-                                 pady=36,
-                                 font=("Helvetica Light", 15, "bold"),
-                                 bg="#57a1f8",
-                                 border=0,
-                                 command=lambda: self.register_screen(self.root))
+        register_button = Button(
+            self.root,
+            text="Register",
+            width=25,
+            pady=36,
+            font=("Helvetica Light", 15, "bold"),
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.register_screen(self.root),
+        )
         register_button.place(x=500, y=150)
 
-        login_button = Button(self.root,
-                              text="Login",
-                              width=25,
-                              pady=36,
-                              font=("Helvetica Light", 15, "bold"),
-                              bg="#57a1f8", border=0,
-                              command=lambda: self.login_screen(self.root))
+        login_button = Button(
+            self.root,
+            text="Login",
+            width=25,
+            pady=36,
+            font=("Helvetica Light", 15, "bold"),
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.login_screen(self.root),
+        )
         login_button.place(x=100, y=150)
 
         heading = Label(self.root, text="P2P-backup™", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 40, "bold"))
@@ -96,8 +101,18 @@ class Application:
         label2.place(x=25, y=225)
 
         var_flag = IntVar()
-        stay_in = Checkbutton(frm, width=1, height=1, cursor="hand2", bg="white", fg="#57a1f8", variable=var_flag,
-                              command=self.change_remember_login, activebackground="white", activeforeground="white")
+        stay_in = Checkbutton(
+            frm,
+            width=1,
+            height=1,
+            cursor="hand2",
+            bg="white",
+            fg="#57a1f8",
+            variable=var_flag,
+            command=self.change_remember_login,
+            activebackground="white",
+            activeforeground="white",
+        )
         stay_in.place(x=120, y=225)
 
         def_username, def_password = "username", "password"
@@ -122,14 +137,23 @@ class Application:
         passcode.insert(0, def_password)
         Frame(frm, width=295, height=2, bg="black").place(x=25, y=177)
 
-        Button(frm, width=39, pady=7, text="Log-in", fg="white", bg="#57a1f8", border=0,
-               command=lambda: self.login(user.get(), passcode.get(), prev=window)).place(x=35, y=264)
+        Button(
+            frm,
+            width=39,
+            pady=7,
+            text="Log-in",
+            fg="white",
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.login(user.get(), passcode.get(), prev=window),
+        ).place(x=35, y=264)
 
         label = Label(frm, text="Don't have an account?", fg="black", bg="white", font=("Microsoft YaHei UI Light", 9))
         label.place(x=75, y=300)
 
-        register_button = Button(frm, width=6, text="Register", border=0, bg="white", cursor="hand2", fg="#57a1f8",
-                                 command=lambda: self.register_screen(window))
+        register_button = Button(
+            frm, width=6, text="Register", border=0, bg="white", cursor="hand2", fg="#57a1f8", command=lambda: self.register_screen(window)
+        )
         register_button.place(x=215, y=300)
 
         window.mainloop()
@@ -157,8 +181,18 @@ class Application:
         label2.place(x=25, y=225)
 
         var_flag = IntVar()
-        stay_in = Checkbutton(frm, width=1, height=1, cursor="hand2", bg="white", fg="#57a1f8", variable=var_flag,
-                              activebackground="white", activeforeground="white", command=self.change_remember_login)
+        stay_in = Checkbutton(
+            frm,
+            width=1,
+            height=1,
+            cursor="hand2",
+            bg="white",
+            fg="#57a1f8",
+            variable=var_flag,
+            activebackground="white",
+            activeforeground="white",
+            command=self.change_remember_login,
+        )
         stay_in.place(x=120, y=225)
 
         user = Entry(frm, width=25, fg="black", border=0, font=("Microsoft YaHei UI Light", 11))
@@ -171,14 +205,23 @@ class Application:
         passcode.insert(0, "password")
         Frame(frm, width=295, height=2, bg="black").place(x=25, y=177)
 
-        Button(frm, width=39, pady=7, text="Register", fg="white", bg="#57a1f8", border=0,
-               command=lambda: self.register(user.get(), passcode.get(), prev=window)).place(x=35, y=264)
+        Button(
+            frm,
+            width=39,
+            pady=7,
+            text="Register",
+            fg="white",
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.register(user.get(), passcode.get(), prev=window),
+        ).place(x=35, y=264)
 
         label = Label(frm, text="Already have an account?", fg="black", bg="white", font=("Microsoft YaHei UI Light", 9))
         label.place(x=75, y=300)
 
-        register_button = Button(frm, width=6, text="Log-in", border=0, bg="white", cursor="hand2", fg="#57a1f8",
-                                 command=lambda: self.login_screen(window))
+        register_button = Button(
+            frm, width=6, text="Log-in", border=0, bg="white", cursor="hand2", fg="#57a1f8", command=lambda: self.login_screen(window)
+        )
         register_button.place(x=215, y=300)
 
         window.mainloop()
@@ -240,36 +283,46 @@ class Application:
         root.config(background="white")
 
         if req_file is not None:
-            retrieving_file_label = Label(root, text="Retrieving file, check restore folder soon", fg="green", bg="white",
-                                          font=("Microsoft YaHei UI Light", 12, "bold"))
+            retrieving_file_label = Label(
+                root, text="Retrieving file, check restore folder soon", fg="green", bg="white", font=("Microsoft YaHei UI Light", 12, "bold")
+            )
             retrieving_file_label.place(x=285, y=365)
             retrieving_file_label.after(3500, retrieving_file_label.destroy)
 
-        backup_file = Button(root,
-                             text="Backup file",
-                             width=20,
-                             pady=36,
-                             font=("Helvetica Light", 15, "bold"),
-                             bg="#57a1f8", border=0,
-                             command=lambda: self.backup_file(root))
+        backup_file = Button(
+            root,
+            text="Backup file",
+            width=20,
+            pady=36,
+            font=("Helvetica Light", 15, "bold"),
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.backup_file(root),
+        )
         backup_file.place(x=25, y=70)
 
-        file_list_button = Button(root,
-                                  text="Get file list",
-                                  width=20,
-                                  pady=36,
-                                  font=("Helvetica Light", 15, "bold"),
-                                  bg="#57a1f8", border=0,
-                                  command=lambda: self.show_file_list(root))
+        file_list_button = Button(
+            root,
+            text="Get file list",
+            width=20,
+            pady=36,
+            font=("Helvetica Light", 15, "bold"),
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.show_file_list(root),
+        )
         file_list_button.place(x=25, y=200)
 
-        retrieve_file_button = Button(root,
-                                      text="Retrieve file",
-                                      width=20,
-                                      pady=36,
-                                      font=("Helvetica Light", 15, "bold"),
-                                      bg="#57a1f8", border=0,
-                                      command=lambda: self.retrieve_file_screen(root))
+        retrieve_file_button = Button(
+            root,
+            text="Retrieve file",
+            width=20,
+            pady=36,
+            font=("Helvetica Light", 15, "bold"),
+            bg="#57a1f8",
+            border=0,
+            command=lambda: self.retrieve_file_screen(root),
+        )
         retrieve_file_button.place(x=25, y=330)
 
         heading = Label(root, text="P2P-backup™", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 40, "bold"))
@@ -283,8 +336,13 @@ class Application:
             invalid_file_label.after(1500, invalid_file_label.destroy)
             return
         self.client.req_send_file(filename)
-        sending_file_label = Label(prev, text="File selected successfully, sending file in background", fg="green", bg="white",
-                                   font=("Microsoft YaHei UI Light", 12, "bold"))
+        sending_file_label = Label(
+            prev,
+            text="File selected successfully, sending file in background",
+            fg="green",
+            bg="white",
+            font=("Microsoft YaHei UI Light", 12, "bold"),
+        )
         sending_file_label.place(x=285, y=105)
         sending_file_label.after(2500, sending_file_label.destroy)
 
@@ -300,11 +358,14 @@ class Application:
         heading = Label(root, text="File list:", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 40, "bold"))
         heading.place(x=50, y=5)
 
-        Button(root, width=25, pady=7, text="Back", fg="white", bg="#57a1f8", border=0,
-               command=lambda: self.regular_screen(root)).place(x=700, y=20)
+        Button(root, width=25, pady=7, text="Back", fg="white", bg="#57a1f8", border=0, command=lambda: self.regular_screen(root)).place(
+            x=700, y=20
+        )
 
         if not files:
-            heading = Label(root, text="No files, you can go back and backup some!", fg="red", bg="white", font=("Microsoft YaHei UI Light", 25, "bold"))
+            heading = Label(
+                root, text="No files, you can go back and backup some!", fg="red", bg="white", font=("Microsoft YaHei UI Light", 25, "bold")
+            )
             heading.place(x=50, y=75)
             return
 
@@ -334,8 +395,9 @@ class Application:
         heading = Label(root, text="Press file to retrieve", fg="#57a1f8", bg="white", font=("Microsoft YaHei UI Light", 40, "bold"))
         heading.place(x=50, y=5)
 
-        Button(root, width=25, pady=7, text="Back", fg="white", bg="#57a1f8", border=0,
-               command=lambda: self.regular_screen(root)).place(x=700, y=20)
+        Button(root, width=25, pady=7, text="Back", fg="white", bg="#57a1f8", border=0, command=lambda: self.regular_screen(root)).place(
+            x=700, y=20
+        )
         max_x = 925
         cur_y = 85
         cur_x = 30
@@ -344,13 +406,16 @@ class Application:
             return lambda: self.retrieve_file(filename, window)
 
         if not files:
-            heading = Label(root, text="No files, you can go back and backup some!", fg="red", bg="white", font=("Microsoft YaHei UI Light", 25, "bold"))
+            heading = Label(
+                root, text="No files, you can go back and backup some!", fg="red", bg="white", font=("Microsoft YaHei UI Light", 25, "bold")
+            )
             heading.place(x=50, y=75)
             return
 
         for file in files:
-            f_button = Button(root, text=file, fg="black", bg="#57a1f8", font=("Microsoft YaHei UI Light", 15, "bold"),
-                              command=get_cmd(file, root))
+            f_button = Button(
+                root, text=file, fg="black", bg="#57a1f8", font=("Microsoft YaHei UI Light", 15, "bold"), command=get_cmd(file, root)
+            )
             if cur_x + 15 * len(file) > max_x:
                 cur_y += 50
                 cur_x = 30
@@ -373,10 +438,7 @@ class Application:
 
     @staticmethod
     def browse_files() -> str | None:
-        filename = filedialog.askopenfilename(initialdir="/",
-                                              title="Select a File",
-                                              filetypes=[("All files", "*.*")]
-                                              )
+        filename = filedialog.askopenfilename(initialdir="/", title="Select a File", filetypes=[("All files", "*.*")])
         print(filename)
         if not filename:
             return None
@@ -403,5 +465,5 @@ def main():
     app.start(name=name, port=port)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

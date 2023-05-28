@@ -2,6 +2,7 @@ import collections
 import json
 import os.path
 import socket
+import sys
 from collections import deque
 from threading import Thread
 from typing import Deque
@@ -88,9 +89,7 @@ class Client:
             return
 
         file = abstract_file(absolute_path, key=self.chacha_key)
-        dicts = [
-            {"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first} for stripe in file.stripes
-        ]
+        dicts = [{"hash": stripe.hash, "id": stripe.id, "is_parity": stripe.is_parity, "is_first": stripe.is_first} for stripe in file.stripes]
         self.files_on_server[file.name] = file
         request = SendFileReq(file_name=file.name, file_hash=file.hash, size=file.len, nonce=encode_for_json(file.nonce), stripes=dicts)
         self.send_to_server(request)
@@ -103,9 +102,7 @@ class Client:
         time.sleep(0.1)
         k = 0
         while k * MAX_DATA_SIZE < len(data):
-            append_stripe_msg = AppendStripe(
-                stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE])
-            )
+            append_stripe_msg = AppendStripe(stripe_id=stripe_id, seq=k, raw=encode_for_json(data[k * MAX_DATA_SIZE : (k + 1) * MAX_DATA_SIZE]))
             self.send_to_peer(append_stripe_msg, peer_addr)
             k += 1
             time.sleep(SEND_DELAY)
@@ -267,23 +264,20 @@ class Client:
 
 def main():
     logging.basicConfig(level=LOGLEVEL)
-    if len(sys.argv) < 3:
-        name = None
-        port = 30000
-    else:
-        name = sys.argv[1]
-        port = int(sys.argv[2])
+    assert len(sys.argv) > 3
+    name = sys.argv[1]
+    port = int(sys.argv[2])
+
     client = Client(name, port)
     if not LOCALHOST:
         client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")
 
-    path_private = rf"{CLIENT_KEYS_PATH}{name}\private.pem"
-    path_public = rf"{CLIENT_KEYS_PATH}{name}\public.pem"
-    private_key, public_key = encryption_utils.generate_ecdh_keys(path_private=path_private, path_public=path_public)
+    p = Path(CLIENT_KEYS_PATH) / name
+    if not p.is_dir():
+        os.makedirs(p)
+    private_key, public_key = encryption_utils.generate_ecdh_keys(path_private=p / "private.pem", path_public=p / "public.pem")
 
-    # private_key = encryption_utils.load_private_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\private.pem")
-    # public_key = encryption_utils.load_public_ecdh_key(rf"{CLIENT_KEYS_PATH}{name}\public.pem")
     f = encryption_utils.HandshakeWithServerTask(
         private_key=private_key, public_key=public_key, server_addr=SERVER_ADDR, sock=client.sock
     ).begin()

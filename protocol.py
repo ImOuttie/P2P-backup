@@ -42,7 +42,7 @@ T = TypeVar("T", bound="Parent")
 class Message:
     """
     Baseclass for protocol message, every message class must contain:
-    __init__() method for manual initialization. 
+    __init__() method for manual initialization.
     to_dict() method so it can be passed to JSON.
     from_dict() method so the message can be easily initialized from a dict.
     """

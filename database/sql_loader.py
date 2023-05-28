@@ -121,9 +121,7 @@ class SQLLoader:
         user.user_db_id = new_storing_gb
 
     def _insert_file_stripe(self, file_stripe: protocol.GetFileRespStripe, file_db_id: int):
-        insert_message_sql = (
-            "INSERT INTO file_stripe(client_stripe_id, hash, is_parity, is_first, location, file_id) VALUES(?, ?, ?, ?, ?, ?)"
-        )
+        insert_message_sql = "INSERT INTO file_stripe(client_stripe_id, hash, is_parity, is_first, location, file_id) VALUES(?, ?, ?, ?, ?, ?)"
         data = (file_stripe["id"], file_stripe["hash"], file_stripe["is_parity"], file_stripe["is_first"], file_stripe["peer"], file_db_id)
         message_id = self._insert_row(insert_message_sql, data)
         if message_id == -1:

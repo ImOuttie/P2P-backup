@@ -187,7 +187,6 @@ class LoginToServerTask:
             data, addr = self.sock.recvfrom(1024)
             try:
                 if addr != self._server_addr:
-                    print('bad bad bad')
                     raise Exception(f"Server spoofed \n{data=}\n{addr=}")
                 msg = decrypt_fernet_to_json(self.fernet, data)
                 if msg["cmd"] == "login_resp":

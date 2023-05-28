@@ -30,7 +30,7 @@ class TempStripe:
     is_parity: bool
     parent_file: str
     is_first: bool
-    cur_seq: int = - 1  # init sequence
+    cur_seq: int = -1  # init sequence
     complete: bool = False
     max_seq: int = field(default_factory=int)
 
