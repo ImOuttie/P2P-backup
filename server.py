@@ -25,7 +25,7 @@ KEY: str
 class Server:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((SERVER_IP, SERVER_PORT))
+        self.sock.bind(("127.0.0.1" if settings.LOCALHOST else "0.0.0.0", SERVER_PORT))
         self.clients: Dict[ADDRESS, NAME] = {}
         self.names: Dict[NAME, ADDRESS] = {}
         self.file_names: Dict[NAME, Dict[FILENAME, UserFile]] = {}

@@ -2,7 +2,7 @@ import sys
 
 BYTEORDER = sys.byteorder
 
-LOCALHOST = True
+LOCALHOST = False
 
 if LOCALHOST:
     SERVER_IP = "127.0.0.1"
@@ -26,7 +26,7 @@ DB_PATH = r".\database\server.db"
 LOGIN_INFO_PATH = r"login_info\\"
 
 GET_LOGIN_INFO = True
-RESTART_DB = False
+RESTART_DB = True
 SEND_DELAY = 0.01
 MAX_DATA_SIZE = 600
 MAX_PACKET_TIMEOUT = 0.5

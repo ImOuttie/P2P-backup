@@ -89,7 +89,7 @@ def load_private_ecdh_key(path: PATH) -> EllipticCurvePrivateKey:
         return loaded_private_key
 
 
-def get_fernet(public_key: EllipticCurvePublicKey, private_key: EllipticCurvePrivateKey):
+def get_fernet(public_key: EllipticCurvePublicKey, private_key: EllipticCurvePrivateKey) -> Fernet:
     shared_key = private_key.exchange(ec.ECDH(), public_key)
     derived_key = HKDF(
         algorithm=hashes.SHA256(),

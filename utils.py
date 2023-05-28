@@ -110,7 +110,7 @@ def append_to_file(file_id: str, data: bin, path=BACKUP_PATH):
 
 
 def encode_for_json(data: bytes) -> str:
-    """ " Encodes data to base64 string."""
+    """Encodes data to base64 string."""
     return str(base64.b64encode(data), encoding="ASCII")
 
 
