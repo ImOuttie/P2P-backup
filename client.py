@@ -269,8 +269,6 @@ def main():
     port = int(sys.argv[2])
 
     client = Client(name, port)
-    if not LOCALHOST:
-        client._server_addr = (input("enter ip \r\n"), SERVER_PORT)
     logging.debug(f"Client {name } up and running on port {port}")
 
     p = Path(CLIENT_KEYS_PATH) / name
